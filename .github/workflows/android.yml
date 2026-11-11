@@ -35,7 +35,6 @@ jobs:
       - name: Compila e firma
         id: build
         env:
-          NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
           KS_B64: ${{ secrets.ANDROID_KEYSTORE }}
           KS_PASS_SECRET: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KS_ALIAS_SECRET: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -43,12 +42,14 @@ jobs:
           set -o pipefail
           (
             set -ex
+            export NDK_HOME="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+            ls "$NDK_HOME" | head -3
             npm ci
             npm test
             npm run build
             cd android
-            npx tauri icon icons/icon.png
             npx tauri android init --ci
+            npx tauri icon icons/icon.png
             npx tauri android build --apk --target aarch64 --ci
             cd ..
             APK=$(find android/gen/android/app/build/outputs/apk -name '*.apk' | grep -i release | head -1)
