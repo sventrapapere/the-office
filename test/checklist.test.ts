@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { parseChecklist, serializeChecklist, parseLog, serializeLog, sec, streak, calStreaks, anyStreak } from '../src/lib/checklist'
 import { parseFM, mdRender, toNote, setFM, toggleTaskLine } from '../src/lib/md'
 const V = '/mnt/user-data/uploads/Obsidian/GONDISHAPUR/'
-describe('file reali', () => {
+// Questi test girano solo dove c'è una copia del vault vero (non in CI)
+describe.skipIf(!existsSync(V))('file reali', () => {
   it('checklist: round-trip identico', () => {
     const t = readFileSync(V + '04 Checklist/Checklist.md', 'utf8').replace(/\r\n/g, '\n')
     const doc = parseChecklist(t)
