@@ -7,7 +7,8 @@ import type { Vault, VaultFile } from './types'
 const SKIP_TOP = ['+', '_dashboard', '_templates', '30 Archivio lavori', '40 Documenti personali']
 
 export const isDesktop = () =>
-  typeof location !== 'undefined' && (location.hostname === 'office.localhost' || location.protocol === 'office:' || '__TAURI_INTERNALS__' in window)
+  typeof location !== 'undefined' && (location.hostname === 'office.localhost' || location.protocol === 'office:')
+// Nota: niente controllo su __TAURI_INTERNALS__, c'è anche nell'app Android (che invece usa Supabase)
 
 export function desktopVault(name = 'GONDISHAPUR', base = ''): Vault {
   const enc = (p: string) => base + '/_api/file?path=' + encodeURIComponent(p)
