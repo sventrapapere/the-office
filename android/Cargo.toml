@@ -1,0 +1,22 @@
+[package]
+name = "the-office-mobile"
+version = "2.0.0"
+edition = "2021"
+description = "The Office per Android: stessa interfaccia del PC, note da Supabase"
+
+[lib]
+name = "the_office_mobile_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"

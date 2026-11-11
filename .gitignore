@@ -1,0 +1,7 @@
+node_modules
+dist
+dev/vault.json
+src-tauri/target
+src-tauri/gen
+android/gen
+android/target

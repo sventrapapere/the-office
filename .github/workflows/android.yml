@@ -1,0 +1,93 @@
+# Compila l'APK Android (Pixel 9a, arm64) a ogni push su main, o a mano da "Actions".
+# Risultato: release "apk-latest" con TheOffice.apk (scaricabile dal telefono).
+# Il registro della compilazione finisce sempre nel branch "build-logs" (così Claude può leggerlo).
+# Firma: secrets ANDROID_KEYSTORE (base64 del .jks), ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS.
+# Senza secrets l'APK si firma con una chiave usa e getta: si installa, ma per aggiornarla
+# bisogna disinstallare la versione precedente. Tenere sempre la stessa chiave.
+name: APK Android
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: aarch64-linux-android }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: android }
+
+      - name: Compila e firma
+        id: build
+        env:
+          NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE }}
+          KS_PASS_SECRET: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KS_ALIAS_SECRET: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -o pipefail
+          (
+            set -ex
+            npm ci
+            npm test
+            npm run build
+            cd android
+            npx tauri icon icons/icon.png
+            npx tauri android init --ci
+            npx tauri android build --apk --target aarch64 --ci
+            cd ..
+            APK=$(find android/gen/android/app/build/outputs/apk -name '*.apk' | grep -i release | head -1)
+            echo "APK: $APK"
+            BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+            if [ -n "$KS_B64" ]; then
+              echo "$KS_B64" | base64 -d > ks.jks; KS=ks.jks; KS_PASS="$KS_PASS_SECRET"; KS_ALIAS="$KS_ALIAS_SECRET"
+            else
+              echo "ATTENZIONE: secrets di firma assenti, uso una chiave temporanea"
+              KS_PASS=$(openssl rand -hex 16); KS_ALIAS=temp; KS=temp.jks
+              keytool -genkeypair -keystore temp.jks -alias temp -keyalg RSA -keysize 2048 -validity 10000 -storepass "$KS_PASS" -keypass "$KS_PASS" -dname "CN=The Office temp"
+            fi
+            $BT/zipalign -f -p 4 "$APK" aligned.apk
+            KS_PASS="$KS_PASS" $BT/apksigner sign --ks "$KS" --ks-pass env:KS_PASS --ks-key-alias "$KS_ALIAS" --out TheOffice.apk aligned.apk
+            $BT/apksigner verify TheOffice.apk
+            rm -f ks.jks temp.jks
+            ls -la TheOffice.apk
+          ) 2>&1 | tee build.log
+
+      - name: Pubblica l'APK
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete apk-latest --yes --cleanup-tag || true
+          gh release create apk-latest TheOffice.apk --title "The Office per Android" \
+            --notes "Compilata da ${GITHUB_SHA::7} il $(date -u +'%Y-%m-%d %H:%M') UTC. Sul telefono: scarica TheOffice.apk e aprilo per installare o aggiornare."
+
+      - name: Salva il registro
+        if: always()
+        run: |
+          echo "esito: ${{ steps.build.outcome }} · commit ${GITHUB_SHA::7} · $(date -u)" > status.txt
+          mkdir -p /tmp/logs && cp build.log status.txt /tmp/logs/ 2>/dev/null || true
+          git config user.name "build-bot"; git config user.email "build-bot@users.noreply.github.com"
+          git checkout --orphan build-logs-tmp
+          git rm -rf --cached . >/dev/null
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp /tmp/logs/* .
+          tail -c 900000 build.log > build.tail.log && mv build.tail.log build.log
+          git add build.log status.txt
+          git commit -m "registro ${GITHUB_SHA::7}"
+          git push -f origin HEAD:build-logs
