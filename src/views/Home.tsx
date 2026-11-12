@@ -270,20 +270,20 @@ function Costanza({ phone }: { phone?: boolean }) {
       right={phone ? <Button size="sm" variant="ghost" onClick={() => { setFull((v) => !v); setSel(null) }}>{full ? 'Settimana' : 'Mese'}<Icon name="chevd" size={13} /></Button> : monthPicker}
       menu={menu}
     >
-      <div className="flex items-end gap-4">
+      <div className="flex items-end gap-4 -mt-1">
         <div className="min-w-0">
-          <div className="num text-[44px] font-semibold leading-none text-ac"><NumberFlow value={cur} /></div>
-          <div className="text-[13px] text-mu mt-1.5 truncate">{f === 'all' ? `giorni di fila con almeno un’abitudine` : `giorni di fila · ${f}`}</div>
+          <NumberFlow value={cur} className="block num text-[44px] font-semibold text-ac" style={{ lineHeight: 1, ['--number-flow-char-height' as string]: '1em', ['--number-flow-mask-height' as string]: '0.12em', margin: '-0.12em 0' }} />
+          <div className="text-[13px] text-mu mt-1 truncate">{f === 'all' ? `giorni di fila con almeno un’abitudine` : `giorni di fila · ${f}`}</div>
         </div>
         <span className="flex-1" />
         <div className="text-right flex-none">
-          <div className="num text-[18px] font-semibold">{pct == null ? '–' : pct + '%'}</div>
+          <div className="num text-[18px] font-semibold leading-tight">{pct == null ? '–' : pct + '%'}</div>
           <div className="text-[12px] text-mu">del mese · record <span className="num text-tx">{best}</span></div>
         </div>
       </div>
       {phone && full && <div className="self-start">{monthPicker}</div>}
       <div className="grid grid-cols-7 gap-1.5" role="grid" aria-label="Calendario della costanza">
-        {['L', 'M', 'M', 'G', 'V', 'S', 'D'].map((w, i) => <span key={i} className="text-[11px] text-mu text-center pb-0.5">{w}</span>)}
+        {['L', 'M', 'M', 'G', 'V', 'S', 'D'].map((w, i) => <span key={i} className="text-[11px] text-mu text-center leading-none pb-1">{w}</span>)}
         {Array.from({ length: lead }, (_, i) => <span key={'e' + i} />)}
         {cells.map(({ d, k, r, future }) => {
           const isToday = k === tk
@@ -297,20 +297,19 @@ function Costanza({ phone }: { phone?: boolean }) {
               aria-label={lbl}
               aria-pressed={sel === k}
               onClick={() => setSel(sel === k ? null : k)}
-              className="press rounded-md cursor-pointer disabled:cursor-default relative"
+              className="press rounded-md cursor-pointer disabled:cursor-default flex items-center justify-center"
               style={{
                 height: phone ? 40 : 30,
                 background: r == null ? 'transparent' : heat(r),
                 boxShadow: sel === k || isToday ? '0 0 0 1.5px var(--s1), 0 0 0 3px var(--tx)' : r == null || r === 0 ? 'inset 0 0 0 1px var(--s3)' : undefined,
               }}
             >
-              {phone && !full && <span className="absolute bottom-1 left-0 right-0 text-center num text-[10px] text-mu">{d.getDate()}</span>}
+              <span className="num text-[11px]" style={{ color: r != null && r >= 0.6 ? '#1A0A02' : 'var(--mu)' }}>{d.getDate()}</span>
             </button>
           )
         })}
       </div>
       {sel && <DayDetail k={sel} onClose={() => setSel(null)} />}
-      {!sel && !phone && <span className="text-[12px] text-mu">Tocca un giorno passato per vedere o correggere cosa hai fatto.</span>}
     </Card>
   )
 }
@@ -499,9 +498,8 @@ export default function Home({ phone }: { phone?: boolean }) {
   const log = useStore((s) => s.log)
   const today = new Date()
   const tk = todayKey()
-  const left = daily(check).filter((it) => appliesOn(it, today.getDay()) && !isDone(log, tk, it.title)).length
   const due = todos(check).filter((t) => !t.done && t.due && t.due <= tk).length
-  const sub = [dateLabel(today), left ? `manca${left > 1 ? 'no' : ''} ${left} abitudin${left > 1 ? 'i' : 'e'}` : 'abitudini fatte', due ? `${due} scadenz${due > 1 ? 'e' : 'a'}` : null].filter(Boolean).join(' · ')
+  const sub = [dateLabel(today), due ? `${due} scadenz${due > 1 ? 'e' : 'a'}` : null].filter(Boolean).join(' · ')
 
   if (phone)
     return (
