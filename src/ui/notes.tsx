@@ -57,7 +57,17 @@ export function Poster({ note, onClick, sub, rating, selected }: { note: Note; o
 }
 
 /** Valutazione da 1 a 5 (riscrive `voto` nel frontmatter). */
-export function Stars({ value, onChange, label = 'Voto' }: { value: number; onChange?: (v: number | null) => void; label?: string }) {
+export function Stars({ value, onChange, label = 'Voto', size = 18 }: { value: number; onChange?: (v: number | null) => void; label?: string; size?: number }) {
+  if (!onChange)
+    return (
+      <span role="img" aria-label={value ? `${value} su 5` : 'senza voto'} className="inline-flex gap-0.5 text-ac">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <svg key={i} width={size} height={size} viewBox="0 0 24 24" fill={i <= value ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" />
+          </svg>
+        ))}
+      </span>
+    )
   return (
     <div role="radiogroup" aria-label={label} className="inline-flex gap-0.5">
       {[1, 2, 3, 4, 5].map((i) => (
@@ -69,9 +79,10 @@ export function Stars({ value, onChange, label = 'Voto' }: { value: number; onCh
           aria-label={i + (i === 1 ? ' stella' : ' stelle')}
           disabled={!onChange}
           onClick={() => onChange?.(value === i ? null : i)}
-          className={clsx('w-8 h-8 rounded-md flex items-center justify-center cursor-pointer disabled:cursor-default', i <= value ? 'text-ac' : 'text-ol hov')}
+          className={clsx('rounded-md flex items-center justify-center cursor-pointer disabled:cursor-default', i <= value ? 'text-ac' : 'text-mu hov')}
+          style={{ width: size + 14, height: size + 14 }}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill={i <= value ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true">
+          <svg width={size} height={size} viewBox="0 0 24 24" fill={i <= value ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true">
             <path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" />
           </svg>
         </button>

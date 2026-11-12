@@ -40,6 +40,7 @@ function onReport(r: SyncReport) {
 export async function startDesktopSync(local: Vault) {
   const sb = supa()
   if (!sb || !(await signedIn())) { useStore.setState({ sync: null }); return }
+  if (localStorage.getItem('theoffice:sync-off') === '1') { useStore.setState({ sync: { state: 'offline' } }); return }
   syncer = createSync(local, sb, onReport)
   useStore.setState({ sync: { state: 'syncing' } })
   const run = () => { useStore.setState((s) => ({ sync: s.sync ? { ...s.sync, state: 'syncing' } : { state: 'syncing' } })); syncer!.run() }

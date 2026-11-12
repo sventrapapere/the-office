@@ -49,6 +49,7 @@ export function setFM(text: string, key: string, value: string | boolean | numbe
   const end = text.indexOf('\n---', 4)
   const head = text.slice(4, end).split('\n')
   const i = head.findIndex((l) => new RegExp('^' + escRe(key) + ':').test(l))
+  if (value === null && i < 0) return text // niente da togliere: non aggiungo chiavi vuote
   if (i >= 0) {
     // rimuove eventuali righe di lista sotto la chiave
     let j = i + 1

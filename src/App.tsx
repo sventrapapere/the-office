@@ -1,7 +1,7 @@
 import { useEffect, useState, lazy, Suspense } from 'react'
 import { Toaster } from 'sonner'
 import { useStore, type SectionId } from './store'
-import { SECTIONS } from './sections'
+import { SECTIONS, orderedSections } from './sections'
 import { Dock, TopBar } from './ui/Shell'
 import { PhoneShell } from './ui/PhoneShell'
 import { SearchDialog } from './ui/Search'
@@ -55,8 +55,9 @@ function useShortcuts(wide: boolean) {
       if ((e.ctrlKey || e.metaKey) && k === 'k') { e.preventDefault(); st.set('searchOpen', !st.searchOpen) }
       else if ((e.ctrlKey || e.metaKey) && k === 'n') { e.preventDefault(); st.set('captureOpen', true) }
       else if ((e.ctrlKey || e.metaKey) && k === 'j' && wide) { e.preventDefault(); st.set('claudeOpen', !st.claudeOpen) }
+      else if ((e.ctrlKey || e.metaKey) && k === 'e' && st.reader && !st.reader.editing) { e.preventDefault(); st.setEditing(true) }
       else if (e.altKey && !e.ctrlKey && /^[1-9]$/.test(e.key)) {
-        const s = SECTIONS[+e.key - 1]
+        const s = orderedSections(st.settings)[+e.key - 1]
         if (s) { e.preventDefault(); st.go(s.id) }
       } else if (e.key === 'Escape' && st.reader && !st.reader.editing && !st.searchOpen && !st.captureOpen) {
         const t = e.target as HTMLElement
@@ -103,6 +104,13 @@ export default function App() {
   const loaded = useStore((s) => s.loaded)
   const error = useStore((s) => s.error)
   const light = useStore((s) => s.settings.theme === 'light')
+  const claudeOpen = useStore((s) => s.claudeOpen)
+  const dots = useStore((s) => s.settings.sectionColors)
+  const compact = useStore((s) => s.settings.density === 'compatta')
+  useEffect(() => {
+    document.documentElement.classList.toggle('nodots', !dots)
+    document.documentElement.classList.toggle('compact', compact)
+  }, [dots, compact])
   const needsConnect = useStore((s) => s.needsConnect)
 
   useEffect(() => {
@@ -123,7 +131,7 @@ export default function App() {
       {wide ? (
         <div className="min-h-dvh">
           <Dock />
-          <div className="pl-[84px] pr-6">
+          <div className={'pl-[96px] pr-6 transition-[padding] duration-200 ease-out ' + (claudeOpen ? 'xl:pr-[372px]' : '')}>
             <TopBar />
             <main id="main" className="max-w-[1180px] mx-auto pb-16 pt-2">{body}</main>
           </div>

@@ -5,7 +5,7 @@ import type { SyncReport } from './vault/sync'
 import { toNote, type Note, norm, setFM } from './lib/md'
 import {
   CHECK_PATH, LOG_PATH, INBOX_DIR, parseChecklist, serializeChecklist, parseLog, serializeLog, defaultCheck, defaultLog, sec, todayKey, pad,
-  type Doc, type Log, type Kind,
+  type Doc, type Log, type Kind, type Item,
 } from './lib/checklist'
 
 export type SectionId = 'home' | 'note' | 'film' | 'libri' | 'ricette' | 'miniature' | 'giappone' | 'impostazioni'
@@ -14,6 +14,11 @@ export interface Settings {
   theme: 'dark' | 'light' | 'system'
   homeCards: Record<string, boolean>
   pinned: SectionId[]
+  /** Ordine delle sezioni nel menu (id) e sezioni nascoste. */
+  order: SectionId[]
+  hidden: SectionId[]
+  sectionColors: boolean
+  density: 'comoda' | 'compatta'
 }
 
 const SETTINGS_KEY = 'theoffice:settings'
@@ -21,6 +26,10 @@ const defaultSettings: Settings = {
   theme: 'dark',
   homeCards: { cattura: true, abitudini: true, dafare: true, costanza: true, spesa: true, recenti: true },
   pinned: ['note', 'film', 'ricette'],
+  order: [],
+  hidden: [],
+  sectionColors: true,
+  density: 'comoda',
 }
 function loadSettings(): Settings {
   try {
@@ -67,10 +76,14 @@ interface State {
   write(path: string, text: string, opts?: { undoLabel?: string; quiet?: boolean }): Promise<void>
   mutateCheck(fn: (d: Doc) => void, undoLabel?: string): Promise<void>
   toggleHabit(title: string, key?: string): Promise<void>
-  addItem(kind: Kind, title: string): Promise<void>
+  addItem(kind: Kind, title: string, opts?: { days?: number[]; due?: string; note?: string[] }): Promise<void>
+  updateItem(kind: Kind, index: number, patch: Partial<Item>): Promise<void>
+  createNote(path: string, text: string, opts?: { edit?: boolean; label?: string }): Promise<string>
+  moveNote(path: string, dir: string): Promise<void>
+  deleteNote(path: string): Promise<void>
   toggleItem(kind: Kind, index: number): Promise<void>
   removeItem(kind: Kind, index: number): Promise<void>
-  capture(text: string, kind: 'nota' | Kind): Promise<void>
+  capture(text: string, kind: 'nota' | Kind, opts?: { dir?: string; due?: string }): Promise<void>
   setField(path: string, key: string, value: string | boolean | number | null, label?: string): Promise<void>
 }
 
@@ -234,11 +247,84 @@ export const useStore = create<State>((set, get) => {
       })
     },
 
-    addItem(kind, title) {
+    addItem(kind, title, opts) {
       const t = title.trim()
       if (!t) return Promise.resolve()
       return get().mutateCheck((d) => {
-        sec(d, kind).items.push({ title: t, done: false, days: [], doneAt: null, note: [] })
+        const s = sec(d, kind)
+        if (s.items.some((x) => x.title === t && !x.done)) return
+        const it: Item = { title: t, done: false, days: opts?.days || [], doneAt: null, note: opts?.note || [], due: opts?.due, since: kind === 'daily' ? todayKey() : undefined }
+        // come nella v1: le nuove cose da fare vanno prima di quelle già fatte
+        const firstDone = kind === 'todo' ? s.items.findIndex((x) => x.done) : -1
+        s.items.splice(firstDone < 0 ? s.items.length : firstDone, 0, it)
+      })
+    },
+
+    async updateItem(kind, index, patch) {
+      let old = ''
+      await get().mutateCheck((d) => {
+        const it = sec(d, kind).items[index]
+        if (!it) return
+        old = it.title
+        Object.assign(it, patch)
+      }, 'Modificato')
+      // abitudine rinominata: aggiorno anche il registro, così la serie non si perde
+      if (kind === 'daily' && patch.title && old && patch.title !== old)
+        await serial(async () => {
+          const v = get().vault!
+          const log = parseLog((await v.read(LOG_PATH)) ?? defaultLog())
+          for (const k in log.days) if (log.days[k].has(old)) { log.days[k].delete(old); log.days[k].add(patch.title!) }
+          await writeRaw(LOG_PATH, serializeLog(log))
+        })
+    },
+
+    async createNote(path, text, opts) {
+      const v = get().vault!
+      let p = path
+      for (let i = 2; await v.exists(p); i++) p = path.replace(/\.md$/, ` ${i}.md`)
+      await get().write(p, text, { undoLabel: opts?.label })
+      get().open(p)
+      if (opts?.edit) get().setEditing(true)
+      return p
+    },
+
+    async moveNote(path, dir) {
+      const v = get().vault!
+      const name = path.split('/').pop()!
+      let to = (dir ? dir + '/' : '') + name
+      if (to === path) return
+      for (let i = 2; await v.exists(to); i++) to = (dir ? dir + '/' : '') + name.replace(/\.md$/, ` ${i}.md`)
+      const text = await v.read(path)
+      if (text == null) return
+      await serial(async () => {
+        try {
+          await v.write(to, text)
+          try {
+            await v.remove!(path)
+          } catch {
+            toast('Copiata in ' + (dir || 'radice'), { description: 'Per spostare davvero (e cancellare l’originale) aggiorna l’app: rilancia “Installa The Office.cmd”.' })
+            return get().refresh()
+          }
+          await get().refresh()
+          toast('Spostata in ' + (dir || 'radice'), { action: { label: 'Annulla', onClick: () => serial(async () => { await v.write(path, text); await v.remove!(to); await get().refresh() }) } })
+          const r = get().reader
+          if (r?.path === path) set({ reader: { ...r, path: to } })
+        } catch (e) { fail(e) }
+      })
+    },
+
+    async deleteNote(path) {
+      const v = get().vault!
+      const text = await v.read(path)
+      await serial(async () => {
+        try {
+          await v.remove!(path)
+          if (get().reader?.path === path) get().back()
+          await get().refresh()
+          toast('Nota eliminata', { description: path.split('/').pop()!.replace(/\.md$/, ''), action: text == null ? undefined : { label: 'Annulla', onClick: () => serial(async () => { await v.write(path, text); await get().refresh() }) } })
+        } catch {
+          toast.error('Non riesco a eliminare la nota', { description: 'Serve l’app aggiornata: rilancia “Installa The Office.cmd”, oppure eliminala da Obsidian.' })
+        }
       })
     },
 
@@ -266,18 +352,19 @@ export const useStore = create<State>((set, get) => {
       }, 'Eliminato')
     },
 
-    async capture(text, kind) {
+    async capture(text, kind, opts) {
       const t = text.trim()
       if (!t) return
-      if (kind !== 'nota') return get().addItem(kind, t)
+      if (kind !== 'nota') { await get().addItem(kind, t.split('\n')[0], { due: opts?.due, note: t.split('\n').slice(1).filter(Boolean) }); toast(kind === 'todo' ? 'Aggiunta a Da fare' : 'Aggiunta alla spesa', { description: t.split('\n')[0] }); return }
       const d = new Date()
       const stamp = `${todayKey()} ${pad(d.getHours())}.${pad(d.getMinutes())}`
       const first = t.split('\n')[0].replace(/[\\/:*?"<>|#^[\]]/g, '').slice(0, 60).trim() || 'Nota'
-      let path = `${INBOX_DIR}/${stamp} — ${first}.md`
+      const dir = opts?.dir ?? INBOX_DIR
+      let path = `${dir ? dir + '/' : ''}${stamp} — ${first}.md`
       const v = get().vault!
       if (await v.exists(path)) path = path.replace(/\.md$/, ` (${d.getSeconds()}).md`)
       const body = `---\ncreated: ${todayKey()}\nstatus: inbox\ntags: [inbox]\n---\n\n${norm(t)}\n`
-      await get().write(path, body, { undoLabel: 'Salvata in Inbox' })
+      await get().write(path, body, { undoLabel: dir === INBOX_DIR ? 'Salvata in Inbox' : 'Salvata in ' + (dir || 'radice') })
     },
 
     async setField(path, key, value, label) {

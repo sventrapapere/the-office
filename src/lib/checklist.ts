@@ -15,7 +15,7 @@ export const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDat
 export const fromKey = (k: string) => new Date(k + 'T00:00:00')
 
 export type Kind = 'daily' | 'todo' | 'spesa'
-export interface Item { title: string; done: boolean; days: number[]; doneAt: string | null; since?: string; note: string[] }
+export interface Item { title: string; done: boolean; days: number[]; doneAt: string | null; since?: string; due?: string; note: string[] }
 export interface SecBlock { type: 'sec'; kind: Kind; heading: string; items: Item[]; tail: string[] }
 export interface RawBlock { type: 'raw'; lines: string[] }
 export type Block = SecBlock | RawBlock
@@ -32,6 +32,8 @@ export function parseItem(s: string, checked: boolean): Item {
   })
   s = s.replace(/\[dal::\s*(\d{4}-\d{2}-\d{2})\s*\]/i, (_, d) => { it.since = d; return '' })
   s = s.replace(/✅\s*(\d{4}-\d{2}-\d{2})/, (_, d) => { it.doneAt = d; return '' })
+  // scadenza nel formato del plugin Tasks di Obsidian: 📅 AAAA-MM-GG
+  s = s.replace(/📅\s*(\d{4}-\d{2}-\d{2})/, (_, d) => { it.due = d; return '' })
   it.title = s.trim()
   return it
 }
@@ -66,6 +68,7 @@ export function serItem(it: Item, kind: Kind): string {
   s += it.title
   if (kind === 'daily' && it.days.length && it.days.length < 7) s += ' [giorni:: ' + [1, 2, 3, 4, 5, 6, 0].filter((d) => it.days.includes(d)).map((d) => DOW_S[d]).join(', ') + ']'
   if (kind === 'daily' && it.since) s += ' [dal:: ' + it.since + ']'
+  if (kind === 'todo' && it.due) s += ' 📅 ' + it.due
   if (kind === 'todo' && it.done && it.doneAt) s += ' ✅ ' + it.doneAt
   const note = it.note.filter((l, i, a) => !(i === a.length - 1 && l.trim() === ''))
   return [s, ...note.map((l) => '    ' + l)].join('\n')
@@ -168,7 +171,32 @@ export function anyStreak(log: Log, now = new Date()): number {
   return n
 }
 
+/** Record di giorni consecutivi con almeno un'abitudine fatta. */
+export function anyBest(log: Log): number {
+  const ks = Object.keys(log.days).filter((k) => log.days[k].size).sort()
+  let best = 0, run = 0, prev = ''
+  for (const k of ks) {
+    run = prev && ymd(addDays(fromKey(prev), 1)) === k ? run + 1 : 1
+    best = Math.max(best, run)
+    prev = k
+  }
+  return best
+}
+
 export function dateLabel(d = new Date()): string {
   const s = DOW_L[d.getDay()]
   return s[0].toUpperCase() + s.slice(1) + ' ' + d.getDate() + ' ' + MONTHS[d.getMonth()]
+}
+
+/** Etichetta di una scadenza: "Oggi", "Domani", "Ieri", giorno della settimana entro 6 giorni, altrimenti "12 nov". */
+export function dueLabel(due?: string, today = todayKey()): { text: string; tone: 'late' | 'today' | 'soon' | 'later' | 'none' } {
+  if (!due) return { text: 'Senza data', tone: 'none' }
+  const d = fromKey(due), t = fromKey(today)
+  const diff = Math.round((+d - +t) / 864e5)
+  if (diff < -1) return { text: 'scaduta ' + d.getDate() + ' ' + MONTHS[d.getMonth()].slice(0, 3), tone: 'late' }
+  if (diff === -1) return { text: 'Ieri', tone: 'late' }
+  if (diff === 0) return { text: 'Oggi', tone: 'today' }
+  if (diff === 1) return { text: 'Domani', tone: 'soon' }
+  if (diff < 7) return { text: DOW_L[d.getDay()].replace(/^./, (c) => c.toUpperCase()), tone: 'soon' }
+  return { text: d.getDate() + ' ' + MONTHS[d.getMonth()].slice(0, 3), tone: 'later' }
 }

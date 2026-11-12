@@ -11,7 +11,7 @@ export function Sheet({ open, onOpenChange, title, children, hideTitle }: { open
         <Drawer.Viewport className="sheet-viewport">
           <Drawer.Popup className="sheet-popup">
             <div className="sheet-handle" aria-hidden="true" />
-            <Drawer.Title className={hideTitle ? 'sr-only' : 'm-0 mb-3 text-[15px] font-semibold'}>{title}</Drawer.Title>
+            <Drawer.Title className={hideTitle ? 'sr-only' : 'm-0 mb-3 text-[20px] font-semibold tracking-[-0.01em]'}>{title}</Drawer.Title>
             <Drawer.Content>{children}</Drawer.Content>
           </Drawer.Popup>
         </Drawer.Viewport>
