@@ -49,6 +49,9 @@ jobs:
             npm run build
             cd android
             npx tauri android init --ci
+            # il Gradle Plugin Portal non fa più da specchio a Maven Central per le nuove versioni di Kotlin
+            find gen/android -name '*.gradle.kts' -exec sed -i 's/gradlePluginPortal()/gradlePluginPortal()\n        mavenCentral()\n        google()/' {} +
+            grep -rn -A2 "gradlePluginPortal" gen/android --include=*.kts || true
             npx tauri icon icons/icon.png
             npx tauri android build --apk --target aarch64 --ci
             cd ..
