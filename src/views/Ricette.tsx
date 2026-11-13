@@ -49,17 +49,31 @@ const Status = ({ n }: { n: Note }) =>
   tested(n) ? <span className="num text-[11px] px-1.5 py-0.5 rounded bg-s2 text-mu">Provata</span>
     : <span className="text-[12px] font-semibold px-2 py-0.5 rounded-md border border-dashed border-mu text-tx">Da provare</span>
 
-function RecipeCard({ n }: { n: Note }) {
-  const st = useStore.getState()
+/** Foto della ricetta (campo foto:, come le locandine dei film: URL o percorso nel vault). */
+function usePhoto(n: Note) {
   const vault = useStore((s) => s.vault)
   const img = fmStr(n.fm.foto || n.fm.immagine || n.fm.cover)
-  const src = useAssetUrl(vault, img || null, n.path)
+  return useAssetUrl(vault, img || null, n.path)
+}
+
+function Thumb({ n }: { n: Note }) {
+  const src = usePhoto(n)
+  return (
+    <span className="relative w-14 h-14 rounded-lg bg-s3 flex items-center justify-center flex-none overflow-hidden">
+      {src ? <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" className="absolute inset-0 w-full h-full object-cover" /> : <Icon name="ricette" size={20} />}
+    </span>
+  )
+}
+
+function RecipeCard({ n }: { n: Note }) {
+  const st = useStore.getState()
+  const src = usePhoto(n)
   return (
     <button type="button" onClick={() => st.open(n.path)} className="press group flex flex-col rounded-xl bg-s1 border border-ln overflow-hidden text-left cursor-pointer min-w-0">
-      <span className="relative h-[108px] bg-s3 flex items-start justify-between p-3">
-        {src && <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" />}
+      <span className="relative h-[150px] bg-s3 flex items-start justify-between p-3 overflow-hidden">
+        {src && <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.03]" />}
         <span className="relative h-6 px-2 rounded-md bg-bg/90 text-[12px] font-semibold inline-flex items-center">{catOf(n)}</span>
-        <Icon name="ricette" size={18} className="relative" />
+        {!src && <Icon name="ricette" size={18} className="relative" />}
       </span>
       <span className="flex flex-col gap-2 p-3.5 pt-3">
         <span className="font-semibold text-[16px] leading-snug line-clamp-2">{n.title}</span>
@@ -79,7 +93,7 @@ function NewRecipe({ open, onClose, cats }: { open: boolean; onClose: () => void
   const create = async () => {
     const title = t.trim()
     if (!title) return
-    const text = `---\ntitle: ${JSON.stringify(title)}\ncreated: ${todayKey()}\ncategoria: ${JSON.stringify(cat)}\nporzioni: \ntempo_totale: ${time ? JSON.stringify(time) : ''}\ndifficolta: ${diff}\ntestato: false\nvoto: \ntags: [ricette]\n---\n\n## Ingredienti\n\n- \n\n## Procedimento\n\n1. \n`
+    const text = `---\ntitle: ${JSON.stringify(title)}\ncreated: ${todayKey()}\ncategoria: ${JSON.stringify(cat)}\nfoto: \nporzioni: \ntempo_totale: ${time ? JSON.stringify(time) : ''}\ndifficolta: ${diff}\ntestato: false\nvoto: \ntags: [ricette]\n---\n\n## Ingredienti\n\n- \n\n## Procedimento\n\n1. \n`
     onClose(); setT(''); setTime('')
     await st.createNote(`${DIR}/${cat}/${title.replace(/[\\/:*?"<>|#^[\]]/g, '')}.md`, text, { edit: true, label: 'Ricetta creata' })
   }
@@ -140,7 +154,7 @@ export default function Ricette({ phone }: { phone?: boolean }) {
         <div key={cat + String(onlyTested) + String(quick)} className="fade-in flex flex-col gap-2">
           {list.map((n) => (
             <button key={n.path} type="button" onClick={() => st.open(n.path)} className="press flex items-center gap-3.5 p-2.5 rounded-xl bg-s1 border border-ln text-left cursor-pointer">
-              <span className="w-14 h-14 rounded-lg bg-s3 flex items-center justify-center flex-none"><Icon name="ricette" size={20} /></span>
+              <Thumb n={n} />
               <span className="flex-1 min-w-0 flex flex-col gap-0.5">
                 <span className="font-semibold truncate">{n.title}</span>
                 <span className="text-[12px] text-mu truncate">{[catOf(n), time(n), diff(n)].filter(Boolean).join('  ·  ')}{n.fm.voto ? <span className="text-ac font-semibold"> ★ {fmStr(n.fm.voto)}</span> : null}</span>

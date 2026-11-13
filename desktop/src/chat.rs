@@ -130,7 +130,7 @@ fn process_pending(vault: &Path, claude: &Path, in_file: &Path, out_file: &Path)
             let posters = save_posters(vault);
             if !posters.is_empty() {
                 reply.push_str(&format!(
-                    "\n\nLocandina salvata in `60 Film, serie e anime/_posters/{}`.",
+                    "\n\nImmagine salvata nel vault: `{}`.",
                     posters.join("`, `")
                 ));
             }
@@ -199,23 +199,42 @@ fn invoke(claude: &Path, vault: &Path, text: &str, session: Option<&str>) -> Inv
 /* ───────────── locandine ─────────────
    Se una nota della watchlist ha "poster:" con un URL, scarica l'immagine in _posters/
    e sostituisce l'URL con il percorso locale (Claude dalla chat non ha la shell). */
+/// Scarica le immagini indicate come URL nelle note e le sostituisce con il percorso locale:
+/// - locandine dei film: `poster:` in `60 Film, serie e anime/Titoli` → `_posters/` (scritto `_posters/x.jpg`)
+/// - foto delle ricette: `foto:` in `70 Ricette/**` → `70 Ricette/_foto/` (scritto `70 Ricette/_foto/x.jpg`)
 fn save_posters(vault: &Path) -> Vec<String> {
     let mut saved = Vec::new();
-    let watch = vault.join("60 Film, serie e anime");
-    let titoli = watch.join("Titoli");
-    let Ok(rd) = fs::read_dir(&titoli) else { return saved };
-    for e in rd.flatten() {
-        let p = e.path();
+    let film = vault.join("60 Film, serie e anime");
+    let mut notes: Vec<(PathBuf, &str, PathBuf, String)> = Vec::new();
+    if let Ok(rd) = fs::read_dir(film.join("Titoli")) {
+        for e in rd.flatten() {
+            notes.push((e.path(), "poster", film.join("_posters"), "_posters/".into()));
+        }
+    }
+    let ric = vault.join("70 Ricette");
+    let mut stack = vec![ric.clone()];
+    while let Some(d) = stack.pop() {
+        let Ok(rd) = fs::read_dir(&d) else { continue };
+        for e in rd.flatten() {
+            let p = e.path();
+            let name = e.file_name().to_string_lossy().to_string();
+            if name.starts_with('_') || name.starts_with('.') { continue }
+            if p.is_dir() { stack.push(p) } else { notes.push((p, "foto", ric.join("_foto"), "70 Ricette/_foto/".into())) }
+        }
+    }
+    for (p, field, dir, prefix) in notes {
         if p.extension().and_then(|x| x.to_str()).map(|x| x.eq_ignore_ascii_case("md")) != Some(true) {
             continue;
         }
         let Ok(text) = fs::read_to_string(&p) else { continue };
-        // trova la riga "poster: https://..."
+        // trova la riga "<campo>: https://..." (solo nel frontmatter)
+        let key = format!("{field}:");
         let mut offset = 0usize;
         let mut hit: Option<(usize, usize, String)> = None;
-        for line in text.split_inclusive('\n') {
+        for (i, line) in text.split_inclusive('\n').enumerate() {
             let body = line.trim_end_matches(['\n', '\r']);
-            if let Some(rest) = body.strip_prefix("poster:") {
+            if i > 0 && body == "---" { break }
+            if let Some(rest) = body.strip_prefix(key.as_str()) {
                 let v = rest.trim().trim_matches('"').trim();
                 if (v.starts_with("http://") || v.starts_with("https://")) && !v.contains(char::is_whitespace) {
                     hit = Some((offset, offset + body.len(), v.to_string()));
@@ -235,11 +254,10 @@ fn save_posters(vault: &Path) -> Vec<String> {
         if ![".jpg", ".jpeg", ".png", ".webp"].contains(&ext.as_str()) {
             ext = ".jpg".into();
         }
-        let posters = watch.join("_posters");
-        let _ = fs::create_dir_all(&posters);
+        let _ = fs::create_dir_all(&dir);
         let stem = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
         let name = format!("{stem}{ext}");
-        let dest = posters.join(&name);
+        let dest = dir.join(&name);
         let tmp = std::env::temp_dir().join(format!("theoffice-poster-{}.part", now_ms()));
 
         let mut cmd = Command::new(if cfg!(windows) { "curl.exe" } else { "curl" });
@@ -259,13 +277,13 @@ fn save_posters(vault: &Path) -> Vec<String> {
                 })
                 .unwrap_or(false);
         if good && (fs::rename(&tmp, &dest).is_ok() || fs::copy(&tmp, &dest).is_ok()) {
-            let new_text = format!("{}poster: \"_posters/{}\"{}", &text[..start], name, &text[end..]);
+            let new_text = format!("{}{field}: \"{prefix}{name}\"{}", &text[..start], &text[end..]);
             if fs::write(&p, new_text).is_ok() {
-                log(&format!("locandina salvata: _posters/{name}"));
+                log(&format!("immagine salvata: {prefix}{name}"));
                 saved.push(name);
             }
         } else {
-            log(&format!("locandina non scaricata per {stem}"));
+            log(&format!("immagine non scaricata per {stem}"));
         }
         let _ = fs::remove_file(&tmp);
     }

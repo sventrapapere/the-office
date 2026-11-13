@@ -79,6 +79,8 @@ export function referencedAssets(path: string, text: string): string[] {
   const out = new Set<string>()
   const { fm, body } = parseFM(text)
   if (typeof fm.poster === 'string' && fm.poster && !/^https?:/.test(fm.poster)) out.add('60 Film, serie e anime/' + fm.poster.replace(/^\.?\//, ''))
+  // foto delle ricette: percorso dal vault ("70 Ricette/_foto/x.jpg")
+  if (typeof fm.foto === 'string' && fm.foto && !/^https?:/.test(fm.foto) && fm.foto.includes('/')) out.add(fm.foto.replace(/^\.?\//, ''))
   for (const m of body.matchAll(/!\[\[([^\]|#]+)/g)) if (IMG_EXT.test(m[1])) out.add(m[1].trim())
   for (const m of body.matchAll(/!\[[^\]]*\]\(<?([^)\s>]+)/g)) if (!/^https?:/i.test(m[1]) && IMG_EXT.test(m[1])) { try { out.add(decodeURI(m[1])) } catch { out.add(m[1]) } }
   return [...out]
