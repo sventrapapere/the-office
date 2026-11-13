@@ -20,6 +20,8 @@ export interface Settings {
   hidden: SectionId[]
   sectionColors: boolean
   density: 'comoda' | 'compatta'
+  /** Link del progetto claude.ai per le miniature (MESBG), aperto dal telefono. */
+  mesbgUrl?: string
 }
 
 const SETTINGS_KEY = 'theoffice:settings'
@@ -62,6 +64,8 @@ interface State {
   searchOpen: boolean
   captureOpen: boolean
   claudeOpen: boolean
+  /** Messaggio preparato per il pannello di Claude, e con quale agente ('mesbg' = istruzioni del progetto miniature). */
+  claudeDraft: { text: string; agent: 'vault' | 'mesbg' } | null
   settings: Settings
   /** Sincronizzazione PC ↔ online (solo app desktop collegata a Supabase). */
   sync: { state: SyncState; last?: SyncReport } | null
@@ -76,6 +80,8 @@ interface State {
   setEditing(on: boolean): void
   set<K extends keyof State>(k: K, v: State[K]): void
   saveSettings(p: Partial<Settings>): void
+  /** Apre Claude con un messaggio già scritto: sul PC il pannello (con l'agente scelto), sul telefono l'app Claude. */
+  askClaude(text: string, agent?: 'vault' | 'mesbg'): void
   // scritture
   write(path: string, text: string, opts?: { undoLabel?: string; quiet?: boolean }): Promise<void>
   mutateCheck(fn: (d: Doc) => void, undoLabel?: string): Promise<void>
@@ -197,6 +203,7 @@ export const useStore = create<State>((set, get) => {
     searchOpen: false,
     captureOpen: false,
     claudeOpen: false,
+    claudeDraft: null,
     settings: typeof localStorage !== 'undefined' ? loadSettings() : defaultSettings,
     sync: null,
     needsConnect: false,
@@ -249,6 +256,14 @@ export const useStore = create<State>((set, get) => {
     },
     set(k, v) {
       set({ [k]: v } as Partial<State>)
+    },
+    askClaude(text, agent = 'vault') {
+      if (get().vault?.kind === 'desktop') { set({ claudeDraft: { text, agent }, claudeOpen: true }); return }
+      // telefono: copio la richiesta e apro il progetto (o una chat nuova) nell'app Claude
+      navigator.clipboard?.writeText(text).catch(() => {})
+      const url = agent === 'mesbg' && get().settings.mesbgUrl ? get().settings.mesbgUrl! : 'https://claude.ai/new?q=' + encodeURIComponent(text)
+      toast(agent === 'mesbg' ? 'Richiesta copiata: incollala nel progetto delle miniature' : 'Apro Claude…')
+      window.open(url, '_blank')
     },
     saveSettings(p) {
       const s = { ...get().settings, ...p }

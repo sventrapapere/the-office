@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { zipSync, strToU8 } from 'fflate'
 import { useStore, type SectionId } from '../store'
 import { orderedSections } from '../sections'
-import { PageHead, Card, Seg, Kbd, Pop, Button } from '../ui/kit'
+import { PageHead, Card, Seg, Kbd, Pop, Button , inputCls } from '../ui/kit'
 import { Icon } from '../ui/Icon'
 import { SyncStatus } from '../ui/Shell'
 import { OnlineCard } from '../ui/Connect'
@@ -167,6 +167,9 @@ export default function Settings({ phone }: { phone?: boolean }) {
     <Card title="Claude" plain={phone} flush>
       <Row title="Chat dentro The Office" sub="Sul PC, tramite Claude Code e il tuo abbonamento"><span className="text-[13px] text-mu">{vault?.kind === 'desktop' ? 'Ctrl J' : 'Solo sul PC'}</span></Row>
       <Row title="Dal telefono" sub="Usa l’app Claude: legge e scrive gli stessi dati"><span className="text-[13px] text-mu">Connettore Supabase</span></Row>
+      <Row title="Progetto delle miniature" sub="Link del progetto claude.ai «TLOTR - miniature»: dal telefono le richieste della sezione Miniature si aprono lì">
+        <input defaultValue={settings.mesbgUrl || ''} onBlur={(e) => save({ mesbgUrl: e.target.value.trim() || undefined })} placeholder="https://claude.ai/project/…" aria-label="Link del progetto delle miniature" className={inputCls + ' w-[260px] !h-9 !text-[13px]'} />
+      </Row>
     </Card>
   )
 

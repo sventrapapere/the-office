@@ -16,6 +16,7 @@ use std::{
 use serde_json::{json, Value};
 
 const SYS: &str = "Stai rispondendo dal pannello chat della dashboard The Office. Segui la sezione Chat dalla dashboard di CLAUDE.md: esegui le richieste chiare, chiedi se sono ambigue, rispondi breve in italiano e chiudi dicendo quali file hai cambiato.";
+const SYS_MESBG: &str = "Stai rispondendo dal pannello chat della dashboard The Office, aperto dalla sezione Miniature: qui sei l'agente del progetto miniature (Middle-earth Strategy Battle Game) di Marco e segui le istruzioni del progetto riportate sotto. I file di cui parlano (inventario.md, lavorazione.md, partite.md, stoccaggio.md, riferimenti.md, ricettario-pittura.md, Manuale ITA/Traduzione/...) sono nella cartella `55 Miniature/Kit MESBG/` del vault in cui ti trovi: leggili da lì e modificali lì quando Marco te lo chiede (si sincronizzano da soli con Documenti\\Kit MESBG). Rispondi in italiano e, se hai cambiato file, chiudi dicendo quali.\n\n--- ISTRUZIONI DEL PROGETTO (istruzioni-progetto.md) ---\n\n";
 const ALLOW: &str = "Read,Glob,Grep,Edit,Write,WebSearch,WebFetch,TodoWrite";
 const DENY: &str = "Bash,Edit(./_dashboard/**),Write(./_dashboard/**),Edit(./.claude/**),Write(./.claude/**),Edit(./CLAUDE.md),Write(./CLAUDE.md),Edit(./.obsidian/**),Write(./.obsidian/**)";
 const MAX_AGE_HOURS: f64 = 12.0;
@@ -103,6 +104,13 @@ fn process_pending(vault: &Path, claude: &Path, in_file: &Path, out_file: &Path)
         let id = sv(&next["id"]);
         let conv = sv(&next["conv"]);
         let msg_text = sv(&next["text"]);
+        // agente: "mesbg" = istruzioni del progetto miniature (dal file del Kit)
+        let sys = if next["agent"].as_str() == Some("mesbg") {
+            let ist = fs::read_to_string(vault.join("55 Miniature/Kit MESBG/istruzioni-progetto.md")).unwrap_or_default();
+            format!("{SYS_MESBG}{ist}")
+        } else {
+            SYS.to_string()
+        };
 
         let age_h = parse_iso_ms(&sv(&next["ts"]))
             .map(|t| (now_ms() as f64 - t as f64) / 3_600_000.0)
@@ -117,11 +125,11 @@ fn process_pending(vault: &Path, claude: &Path, in_file: &Path, out_file: &Path)
         add_out(out_file, json!({ "type": "status", "re": id, "conv": conv, "ts": now_iso(), "state": "working" }));
 
         let session = sessions.get(&conv).cloned();
-        let mut r = invoke(claude, vault, &msg_text, session.as_deref());
+        let mut r = invoke(claude, vault, &msg_text, session.as_deref(), &sys);
         let failed = |r: &Invoke| r.json.as_ref().map(|j| j["is_error"].as_bool().unwrap_or(false)).unwrap_or(true);
         if failed(&r) && session.is_some() {
             log("riprendo senza la sessione precedente");
-            r = invoke(claude, vault, &msg_text, None);
+            r = invoke(claude, vault, &msg_text, None, &sys);
         }
 
         let result = r.json.as_ref().and_then(|j| j["result"].as_str()).unwrap_or("").to_string();
@@ -157,10 +165,10 @@ struct Invoke {
     code: i32,
 }
 
-fn invoke(claude: &Path, vault: &Path, text: &str, session: Option<&str>) -> Invoke {
+fn invoke(claude: &Path, vault: &Path, text: &str, session: Option<&str>, sys: &str) -> Invoke {
     let mut cmd = Command::new(claude);
     cmd.args(["-p", "--output-format", "json", "--max-turns", "40"])
-        .args(["--allowedTools", ALLOW, "--disallowedTools", DENY, "--append-system-prompt", SYS]);
+        .args(["--allowedTools", ALLOW, "--disallowedTools", DENY, "--append-system-prompt", sys]);
     if let Some(s) = session {
         cmd.args(["--resume", s]);
     }

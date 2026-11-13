@@ -15,7 +15,7 @@ const CHAT_IN = '_dashboard/chat-in.jsonl'
 const CHAT_OUT = '_dashboard/chat-out.jsonl'
 const CONV_KEY = 'theoffice:chatConv'
 
-interface In { type: 'msg'; id: string; conv: string; ts: string; text: string }
+interface In { type: 'msg'; id: string; conv: string; ts: string; text: string; agent?: 'vault' | 'mesbg' }
 interface Out { type: 'reply' | 'error' | 'status'; re: string; ts: string; text?: string }
 
 const jsonl = <T,>(t: string | null): T[] =>
@@ -30,7 +30,17 @@ export function ClaudePanel() {
   const set = useStore((s) => s.set)
   const vault = useStore((s) => s.vault)
   const refresh = useStore((s) => s.refresh)
-  const [conv, setConv] = useState(() => localStorage.getItem(CONV_KEY) || rid())
+  // agente: in Miniature (o se la richiesta arriva da lì) Claude lavora con le istruzioni del progetto MESBG,
+  // in una conversazione separata da quella generale
+  const route = useStore((s) => s.route)
+  const draft = useStore((s) => s.claudeDraft)
+  const [forced, setForced] = useState<'vault' | 'mesbg' | null>(null)
+  const agent: 'vault' | 'mesbg' = forced ?? (route === 'miniature' ? 'mesbg' : 'vault')
+  useEffect(() => { setForced(null) }, [route])
+  const key = CONV_KEY + (agent === 'mesbg' ? ':mesbg' : '')
+  const [convs, setConvs] = useState<Record<string, string>>({})
+  const conv = convs[key] || localStorage.getItem(key) || (() => { const c = rid(); localStorage.setItem(key, c); return c })()
+  const setConv = (c: string) => { localStorage.setItem(key, c); setConvs((x) => ({ ...x, [key]: c })) }
   const [ins, setIns] = useState<In[]>([])
   const [outs, setOuts] = useState<Out[]>([])
   const [text, setText] = useState('')
@@ -38,7 +48,6 @@ export function ClaudePanel() {
   const logRef = useRef<HTMLDivElement>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
 
-  useEffect(() => { localStorage.setItem(CONV_KEY, conv) }, [conv])
   useEffect(() => {
     if (vault?.kind !== 'desktop') return
     fetch('/_api/chat-status').then((r) => r.json()).then((j) => setWorker(j.worker || null)).catch(() => {})
@@ -73,6 +82,12 @@ export function ClaudePanel() {
     if (open) setTimeout(() => taRef.current?.focus(), 60)
   }, [open])
   useEffect(() => {
+    if (!draft) return
+    setForced(draft.agent)
+    setText(draft.text)
+    set('claudeDraft', null)
+  }, [draft, set])
+  useEffect(() => {
     const el = logRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [ins.length, outs.length, open])
@@ -80,7 +95,7 @@ export function ClaudePanel() {
   const send = async () => {
     const t = text.trim()
     if (!t || !vault) return
-    const m: In = { type: 'msg', id: rid(), conv, ts: new Date().toISOString(), text: t }
+    const m: In = { type: 'msg', id: rid(), conv, ts: new Date().toISOString(), text: t, ...(agent === 'mesbg' ? { agent } : {}) }
     setText('')
     setIns((x) => [...x, m])
     try {
@@ -111,10 +126,15 @@ export function ClaudePanel() {
       <div className="flex items-start gap-3 pt-4 pb-3 pl-4 pr-2">
         <Icon name="claude" size={17} className="mt-1 text-mu" />
         <div className="flex-1 min-w-0">
-          <h2 className="m-0 text-[17px] font-semibold">Claude</h2>
-          <p className="m-0 text-[12px] text-mu leading-snug">Usa il tuo abbonamento tramite Claude Code</p>
+          <h2 className="m-0 text-[17px] font-semibold">Claude{agent === 'mesbg' && <span className="text-ac"> · Miniature</span>}</h2>
+          <p className="m-0 text-[12px] text-mu leading-snug">{agent === 'mesbg' ? 'Con le istruzioni del progetto MESBG e i file del Kit' : 'Usa il tuo abbonamento tramite Claude Code'}</p>
         </div>
-        <MoreMenu items={[{ label: 'Nuova chat', icon: 'plus', onClick: () => setConv(rid()) }]} />
+        <MoreMenu items={[
+          { label: 'Nuova chat', icon: 'plus', onClick: () => setConv(rid()) },
+          { sep: true, label: '', onClick: () => {} },
+          { label: 'Claude generale', checked: agent === 'vault', onClick: () => setForced('vault') },
+          { label: 'Agente Miniature (MESBG)', checked: agent === 'mesbg', onClick: () => setForced('mesbg') },
+        ]} />
         <IconButton icon="close" label="Chiudi la chat" size={32} onClick={() => set('claudeOpen', false)} tabIndex={open ? 0 : -1} />
       </div>
       <div ref={logRef} className="flex-1 overflow-y-auto px-4 pb-4 flex flex-col gap-2.5">
