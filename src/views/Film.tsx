@@ -4,9 +4,8 @@ import { useStore, inDir } from '../store'
 import { section } from '../sections'
 import { Card, Chip, PageHead, Seg, Button, IconButton, Empty, Stat, inputCls } from '../ui/kit'
 import { Stars, Tag } from '../ui/notes'
-import { Modal, Sheet } from '../ui/Sheet'
+import { Modal } from '../ui/Sheet'
 import { useBackClose } from '../lib/backstack'
-import { useTitleBar } from '../ui/TitleBar'
 import { Icon, type IconName } from '../ui/Icon'
 import { useAssetUrl } from '../lib/assets'
 import { fmStr, byTitle, mdRender, setFM, type Note } from '../lib/md'
@@ -56,7 +55,7 @@ function Poster({ note, onClick, selected }: { note: Note; onClick: () => void; 
   const v = num(note.fm.voto)
   const pl = !seen(note) ? platform(note) : null
   return (
-    <button type="button" onClick={onClick} aria-pressed={selected} className="group flex flex-col gap-1.5 text-left cursor-pointer min-w-0" title={note.title}>
+    <button type="button" onClick={onClick} aria-pressed={selected} className="group flex flex-col gap-1.5 w-full text-left cursor-pointer min-w-0" title={note.title}>
       <span className={clsx('relative aspect-[2/3] rounded-[10px] overflow-hidden border bg-s2 flex items-center justify-center transition-transform duration-150 ease-out group-hover:-translate-y-0.5', selected ? 'border-tx' : 'border-ln')}>
         {src ? <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" className="absolute inset-0 w-full h-full object-cover" /> : <Icon name="film" size={20} className="text-mu" />}
         {seen(note) && v != null && <span className="num absolute top-2 right-2 h-5 px-1.5 rounded-md bg-bg/90 text-tx text-[11px] font-semibold inline-flex items-center gap-1"><Icon name="star" size={9} stroke={2.6} />{v}</span>}
@@ -89,7 +88,7 @@ function Counter({ label, value, onChange }: { label: string; value: number; onC
 }
 
 /** Scheda del titolo: ogni modifica si salva subito (con "Annulla" nel messaggio). */
-function Detail({ note, all, onPick, phone }: { note: Note; all: Note[]; onPick: (p: string) => void; phone?: boolean }) {
+function Detail({ note, all, onPick, phone, layout = 'stack' }: { note: Note; all: Note[]; onPick: (p: string) => void; phone?: boolean; layout?: 'stack' | 'row' | 'page' }) {
   const vault = useStore((s) => s.vault)!
   const st = useStore.getState()
   const fm = note.fm
@@ -118,24 +117,24 @@ function Detail({ note, all, onPick, phone }: { note: Note; all: Note[]; onPick:
   const ext = (u: string) => (vault.openExternal ? vault.openExternal(u) : open(u, '_blank'))
   const pls = list(fm.piattaforma)
 
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex gap-4">
-        <span className={clsx('flex-none aspect-[2/3] rounded-[10px] overflow-hidden border border-ln bg-s2 relative flex items-center justify-center', phone ? 'w-[96px]' : 'w-[132px]')}>
-          {src ? <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" referrerPolicy="no-referrer" /> : <Icon name="film" size={22} className="text-mu" />}
-          {watching(note) && <span className="absolute top-2 left-2 h-5 px-1.5 rounded-md bg-ac text-[#1A0A02] text-[11px] font-semibold inline-flex items-center">in corso</span>}
-        </span>
-        <div className="flex-1 min-w-0 flex flex-col gap-1.5 pt-0.5">
-          <div className="text-[22px] font-semibold leading-tight tracking-[-0.01em]">{note.title}</div>
-          {fm.titolo_originale && fmStr(fm.titolo_originale) !== note.title && <div className="text-[13px] text-mu">{fmStr(fm.titolo_originale)}</div>}
-          <div className="text-[13px] text-mu">{[catOf(note), fm.anno].filter(Boolean).join(' · ')}</div>
-          <div className="flex flex-wrap gap-1 mt-0.5">{list(fm.genere).slice(0, 4).map((g) => <Tag key={g} strong>{g}</Tag>)}</div>
-          {seen(note) && <div className="mt-auto"><Stars value={num(fm.voto) ?? 0} onChange={(v) => patch({ voto: v || null }, v ? `Voto ${v}` : 'Voto tolto')} size={phone ? 28 : 22} /></div>}
-        </div>
-      </div>
-
+  const poster = (
+    <span className={clsx('flex-none aspect-[2/3] rounded-[10px] overflow-hidden border border-ln bg-s2 relative flex items-center justify-center', layout === 'page' ? 'w-[220px]' : phone ? 'w-[96px]' : 'w-[132px]')}>
+      {src ? <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" referrerPolicy="no-referrer" /> : <Icon name="film" size={22} className="text-mu" />}
+      {watching(note) && <span className="absolute top-2 left-2 h-5 px-1.5 rounded-md bg-ac text-[#1A0A02] text-[11px] font-semibold inline-flex items-center">in corso</span>}
+    </span>
+  )
+  const head = (
+    <div className="flex-1 min-w-0 flex flex-col gap-1.5 pt-0.5">
+      <div className={clsx('font-semibold leading-tight tracking-[-0.01em]', layout === 'page' ? 'text-[30px]' : 'text-[22px]')}>{note.title}</div>
+      {fm.titolo_originale && fmStr(fm.titolo_originale) !== note.title && <div className="text-[13px] text-mu">{fmStr(fm.titolo_originale)}</div>}
+      <div className="text-[13px] text-mu">{[catOf(note), fm.anno].filter(Boolean).join(' · ')}</div>
+      <div className="flex flex-wrap gap-1 mt-0.5">{list(fm.genere).slice(0, 4).map((g) => <Tag key={g} strong>{g}</Tag>)}</div>
+      {seen(note) && <div className="mt-auto pt-1"><Stars value={num(fm.voto) ?? 0} onChange={(v) => patch({ voto: v || null }, v ? `Voto ${v}` : 'Voto tolto')} size={phone ? 28 : 22} /></div>}
+    </div>
+  )
+  const controls = (
+    <>
       <Seg label="Stato" value={state} onChange={setState} size="lg" full options={[{ id: 'todo', label: 'Da vedere' }, { id: 'corso', label: 'In corso' }, { id: 'visto', label: 'Visto' }]} />
-
       {state === 'corso' && serie && (
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2.5 p-3 rounded-lg bg-s2">
           <Counter label="Stagione" value={season} onChange={(v) => patch({ stagione: v || null, episodio: v !== season ? 0 : ep }, 'Stagione ' + v)} />
@@ -143,90 +142,148 @@ function Detail({ note, all, onPick, phone }: { note: Note; all: Note[]; onPick:
           <Button variant="accent" icon="plus" onClick={() => patch({ stagione: season, episodio: ep + 1 }, `S${season} E${ep + 1}`)} className="ml-auto">1 episodio</Button>
         </div>
       )}
-
       {state === 'visto' && (
         <input value={comment} onChange={(e) => setComment(e.target.value)} onBlur={() => comment.trim() !== fmStr(fm.commento) && patch({ commento: comment.trim() || null }, 'Commento salvato')}
           onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} placeholder="Due parole su com’era (si salva da solo)" aria-label="Commento" className={inputCls} />
       )}
+    </>
+  )
+  const info = (
+    <dl className="m-0 flex flex-col">
+      {pls.length > 0 && <Info k="Dove vederlo">{pls.join(', ')}</Info>}
+      {fm.durata && <Info k={serie ? 'Stagioni' : 'Durata'}>{fmStr(fm.durata)}</Info>}
+      {seen(note) && fm.visto_il && <Info k="Visto il">{new Date(fmStr(fm.visto_il)).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</Info>}
+      {state === 'corso' && serie && <Info k="A che punto"><span className="num">S{season} · E{ep}</span></Info>}
+    </dl>
+  )
+  const saga = eps.length > 1 && (
+    <div>
+      <div className="flex items-center justify-between text-[13px] text-mu mb-1.5"><span>Saga · {fmStr(fm.saga)}</span><span className="num">{eps.filter(seen).length}/{eps.length} visti</span></div>
+      <div className="flex flex-col">
+        {eps.map((x) => (
+          <button key={x.path} type="button" onClick={() => onPick(x.path)} aria-current={x === note} className={clsx('flex items-center gap-2.5 min-h-[34px] px-2 rounded-md text-left text-[14px] cursor-pointer', x === note ? 'bg-s3 text-tx' : 'text-mu hov')}>
+            <b className="num w-5 text-center">{fmStr(x.fm.saga_ordine) || '·'}</b><span className="flex-1 truncate">{x.title}</span>{seen(x) && <Icon name="check" size={13} stroke={2.6} className="text-ok" />}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+  const desc = body.trim() && (
+    <div>
+      <div className={clsx('md text-[14px] text-mu', !more && (layout === 'page' ? '' : layout === 'row' ? 'line-clamp-6' : 'line-clamp-4'))} dangerouslySetInnerHTML={{ __html: html }} />
+      {layout !== 'page' && <Button variant="link" onClick={() => setMore((v) => !v)}>{more ? 'Meno' : 'Altro'}</Button>}
+    </div>
+  )
+  const actions = (
+    <div className={clsx('flex gap-2', layout === 'stack' && 'sticky bottom-0 bg-s1 pt-2 pb-1')}>
+      <Button size="lg" icon="note" onClick={() => st.open(note.path)} className="flex-1">Apri la nota</Button>
+      {trailer && <Button size="lg" icon="external" onClick={() => ext(trailer)} className="flex-1">Trailer</Button>}
+    </div>
+  )
 
-      <dl className="m-0 flex flex-col">
-        {pls.length > 0 && <Info k="Dove vederlo">{pls.join(', ')}</Info>}
-        {fm.durata && <Info k={serie ? 'Stagioni' : 'Durata'}>{fmStr(fm.durata)}</Info>}
-        {fm.anno && <Info k="Anno">{fmStr(fm.anno)}</Info>}
-        {seen(note) && fm.visto_il && <Info k="Visto il">{new Date(fmStr(fm.visto_il)).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</Info>}
-        {state === 'corso' && serie && <Info k="A che punto"><span className="num">S{season} · E{ep}</span></Info>}
-      </dl>
+  // A: dentro la riga, accanto alla locandina (che resta nella griglia): due colonne
+  if (layout === 'row') return (
+    <div className="grid gap-x-8 gap-y-4 grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] pr-8">
+      <div className="flex flex-col gap-3.5 min-w-0">{head}{controls}{info}</div>
+      <div className="flex flex-col gap-3.5 min-w-0">{desc}{saga}<div className="mt-auto">{actions}</div></div>
+    </div>
+  )
+  // D: pagina intera
+  if (layout === 'page') return (
+    <div className="flex gap-8 items-start">
+      <div className="flex flex-col gap-3 sticky top-[72px]">{poster}</div>
+      <div className="flex-1 min-w-0 flex flex-col gap-4 max-w-[760px]">{head}{controls}{info}{saga}{desc}{actions}</div>
+    </div>
+  )
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex gap-4">{poster}{head}</div>
+      {controls}{info}{saga}{desc}{actions}
+    </div>
+  )
+}
 
-      {eps.length > 1 && (
-        <div>
-          <div className="flex items-center justify-between text-[13px] text-mu mb-1.5"><span>Saga · {fmStr(fm.saga)}</span><span className="num">{eps.filter(seen).length}/{eps.length} visti</span></div>
-          <div className="flex flex-col">
-            {eps.map((x) => (
-              <button key={x.path} type="button" onClick={() => onPick(x.path)} aria-current={x === note} className={clsx('flex items-center gap-2.5 min-h-[36px] px-2 rounded-md text-left text-[14px] cursor-pointer', x === note ? 'bg-s3 text-tx' : 'text-mu hov')}>
-                <b className="num w-5 text-center">{fmStr(x.fm.saga_ordine) || '·'}</b><span className="flex-1 truncate">{x.title}</span>{seen(x) && <Icon name="check" size={13} stroke={2.6} className="text-ok" />}
-              </button>
-            ))}
+/**
+ * A — la scheda si apre nella riga della locandina: la riga diventa larga quanto la griglia, con la locandina
+ * a sinistra e la scheda accanto; gli altri titoli di quella riga scendono a quella dopo.
+ */
+function ExpandGrid({ items, open, onOpen, minCol, cols: fixedCols, gap, render, phone, onHover }: {
+  items: Note[]; open: string | null; onOpen: (p: string | null) => void; minCol: number; cols?: number; gap: number; render: (n: Note) => React.ReactNode; phone?: boolean
+  onHover?: (n: Note, el: HTMLElement | null) => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [w, setW] = useState(0)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const ro = new ResizeObserver(([e]) => setW(e.contentRect.width))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const cols = fixedCols ?? Math.max(1, Math.floor((w + gap) / (minCol + gap)))
+  const cell = (w - gap * (cols - 1)) / cols
+  const i = open ? items.findIndex((n) => n.path === open) : -1
+  const rowStart = i < 0 ? -1 : i - (i % cols)
+  const before = i < 0 ? items : items.slice(0, rowStart)
+  const after = i < 0 ? [] : [...items.slice(rowStart, i), ...items.slice(i + 1)]
+  const sel = i < 0 ? null : items[i]
+  const selRef = useRef<HTMLDivElement>(null)
+  useEffect(() => { if (sel) selRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }) }, [sel?.path]) // eslint-disable-line react-hooks/exhaustive-deps
+  const poster = (n: Note) => (
+    <div key={n.path} className="min-w-0" onMouseEnter={(e) => onHover && open !== n.path && onHover(n, e.currentTarget)} onMouseLeave={() => onHover?.(n, null)}>
+      <Poster note={n} onClick={() => onOpen(open === n.path ? null : n.path)} selected={open === n.path} />
+    </div>
+  )
+  return (
+    <div ref={ref} className="grid gap-x-3.5 gap-y-5" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: `20px ${gap}px` }}>
+      {before.map(poster)}
+      {sel && (
+        <div ref={selRef} key={'x' + sel.path} className="expand-in scroll-mt-20 col-span-full flex gap-6 p-3.5 pr-5 -mx-3.5 rounded-2xl bg-s1 border border-ln" style={{ ['--cell' as string]: cell + 'px' }}>
+          {!phone && <div className="flex-none" style={{ width: cell }}>{poster(sel)}</div>}
+          <div className="flex-1 min-w-0 relative pt-1">
+            <IconButton icon="close" label="Chiudi (Esc)" size={32} onClick={() => onOpen(null)} className="absolute -top-1 -right-3 z-10 bg-s1" />
+            {render(sel)}
           </div>
         </div>
       )}
+      {after.map(poster)}
+    </div>
+  )
+}
 
-      {body.trim() && (
-        <div>
-          <div className={clsx('md text-[14px] text-mu', !more && 'line-clamp-4')} dangerouslySetInnerHTML={{ __html: html }} />
-          <Button variant="link" onClick={() => setMore((v) => !v)}>{more ? 'Meno' : 'Altro'}</Button>
+/** C — anteprima al passaggio del mouse: la locandina si ingrandisce in una schedina con le azioni rapide. */
+function HoverCard({ note, rect, onOpen, onLeave }: { note: Note; rect: DOMRect; onOpen: () => void; onLeave: () => void }) {
+  const src = usePoster(note)
+  const st = useStore.getState()
+  const W = Math.max(300, rect.width * 1.9)
+  const left = Math.min(Math.max(12, rect.left + rect.width / 2 - W / 2), window.innerWidth - W - 12)
+  const top = Math.max(12, rect.top - 24)
+  const set = async (p: Record<string, unknown>, label: string) => {
+    let t = (await st.vault!.read(note.path)) ?? ''
+    for (const [k, v] of Object.entries(p)) t = setFM(t, k, v as never)
+    await st.write(note.path, t, { undoLabel: label + ': ' + note.title })
+  }
+  return (
+    <div onMouseLeave={onLeave} className="hover-in fixed z-40 rounded-2xl bg-s1 border border-ol shadow-[var(--shadow)] overflow-hidden" style={{ left, top, width: W }}>
+      <button type="button" onClick={onOpen} className="relative block w-full aspect-[16/9] bg-s2 overflow-hidden cursor-pointer">
+        {src ? <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" referrerPolicy="no-referrer" /> : <Icon name="film" size={26} className="text-mu absolute inset-0 m-auto" />}
+        <span className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-s1 to-transparent" />
+      </button>
+      <div className="p-4 pt-1 flex flex-col gap-2.5">
+        <div className="text-[17px] font-semibold leading-tight">{note.title}</div>
+        <div className="text-[12px] text-mu">{[catOf(note), note.fm.anno, platform(note), note.fm.durata && fmStr(note.fm.durata)].filter(Boolean).join(' · ')}</div>
+        <div className="flex items-center gap-2">
+          {seen(note)
+            ? <Stars value={num(note.fm.voto) ?? 0} onChange={(v) => set({ voto: v || null }, 'Voto ' + (v || 'tolto'))} size={20} />
+            : <Button variant="accent" icon="check" onClick={() => set({ visto: true, in_corso: null, visto_il: todayKey() }, 'Visto')}>Segna visto</Button>}
+          <span className="flex-1" />
+          <Button variant="secondary" onClick={onOpen}>Scheda</Button>
         </div>
-      )}
-
-      <div className="flex gap-2 sticky bottom-0 bg-s1 pt-2 pb-1">
-        <Button size="lg" icon="note" onClick={() => st.open(note.path)} className="flex-1">Apri la nota</Button>
-        {trailer && <Button size="lg" icon="external" onClick={() => ext(trailer)} className="flex-1">Trailer</Button>}
       </div>
     </div>
   )
 }
 
-/** PC: pannello a destra, la griglia resta usabile; ← → passano al titolo vicino, Esc chiude. */
-function SidePanel({ note, nav, onClose, children }: { note: Note | null; nav: { i: number; n: number; go: (d: number) => void }; onClose: () => void; children: React.ReactNode }) {
-  const tb = useTitleBar()
-  useBackClose(!!note, onClose)
-  useEffect(() => {
-    if (!note) return
-    const k = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest('input, textarea, [contenteditable]')) return
-      if (e.key === 'Escape') onClose()
-      else if (e.key === 'ArrowRight') { e.preventDefault(); nav.go(1) }
-      else if (e.key === 'ArrowLeft') { e.preventDefault(); nav.go(-1) }
-    }
-    window.addEventListener('keydown', k)
-    return () => window.removeEventListener('keydown', k)
-  }, [note, nav, onClose])
-  return (
-    <aside aria-label="Scheda del titolo" data-open={!!note} aria-hidden={!note}
-      className={clsx('side-panel fixed right-3 bottom-3 z-30 w-[440px] max-w-[calc(100vw-120px)] flex flex-col rounded-2xl bg-s1 border border-ln shadow-[var(--shadow)]', tb ? 'top-[52px]' : 'top-3')}>
-      <div className="flex items-center gap-1 h-[48px] pl-4 pr-2 border-b border-ln flex-none">
-        <span className="num text-[12px] text-mu flex-1">{nav.n ? `${nav.i + 1} di ${nav.n}` : ''}</span>
-        <IconButton icon="back" label="Titolo precedente (←)" size={32} onClick={() => nav.go(-1)} />
-        <IconButton icon="chev" label="Titolo successivo (→)" size={32} onClick={() => nav.go(1)} />
-        <IconButton icon="close" label="Chiudi (Esc)" size={32} onClick={onClose} />
-      </div>
-      <div key={note?.path} className="fade-in flex-1 overflow-y-auto px-5 pt-4">{children}</div>
-    </aside>
-  )
-}
-
-/** Telefono: scorrendo a destra/sinistra sulla scheda passo al titolo vicino. */
-function useSwipe(go: (d: number) => void) {
-  const start = useRef<[number, number] | null>(null)
-  return {
-    onTouchStart: (e: React.TouchEvent) => { const t = e.touches[0]; start.current = [t.clientX, t.clientY] },
-    onTouchEnd: (e: React.TouchEvent) => {
-      const s0 = start.current; start.current = null
-      if (!s0) return
-      const t = e.changedTouches[0], dx = t.clientX - s0[0], dy = t.clientY - s0[1]
-      if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.6) go(dx < 0 ? 1 : -1)
-    },
-  }
-}
 
 /** Nuovo titolo: crea la nota con lo stesso formato delle altre schede. */
 function AddTitle({ open, onClose, cats }: { open: boolean; onClose: () => void; cats: string[] }) {
@@ -300,10 +357,7 @@ export default function Film({ phone }: { phone?: boolean }) {
   const order = cur && !shown.includes(cur) ? picks : shown
   const idx = cur ? order.indexOf(cur) : -1
   const go = useCallback((d: number) => { if (idx < 0 || !order.length) return; setOpenP(order[(idx + d + order.length) % order.length].path) }, [idx, order])
-  const nav = useMemo(() => ({ i: idx, n: order.length, go }), [idx, order.length, go])
   const close = useCallback(() => setOpenP(null), [])
-  const swipe = useSwipe(go)
-  const detail = cur && <Detail note={cur} all={all} onPick={setOpenP} phone={phone} />
   const filters = (
     <div className="flex flex-wrap items-center gap-2.5">
       <Seg label="Stato" value={show} onChange={setShow} size={phone ? 'md' : 'lg'} options={[
@@ -326,15 +380,32 @@ export default function Film({ phone }: { phone?: boolean }) {
       )}
     </div>
   )
+  // anteprima delle varianti della scheda (A riga, B finestra, C passaggio del mouse, D pagina)
+  // scheda: si apre nella riga della locandina (A); sul PC, fermandosi su una locandina, schedina rapida (C)
+  const [from, setFrom] = useState<'picks' | 'grid'>('grid')
+  useBackClose(!!cur, close, cur?.path)
+  useEffect(() => {
+    if (!cur) return
+    const k = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).closest('input, textarea, [contenteditable]')) return
+      if (e.key === 'Escape') close()
+      else if (e.key === 'ArrowRight') { e.preventDefault(); go(1) }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1) }
+    }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [cur, close, go])
+  const [hover, setHover] = useState<{ n: Note; r: DOMRect } | null>(null)
+  const hoverT = useRef(0)
+  const onHover = (n: Note, el: HTMLElement | null) => { clearTimeout(hoverT.current); if (!el || phone) return; hoverT.current = window.setTimeout(() => setHover({ n, r: el.getBoundingClientRect() }), 450) }
+  const rowDetail = (n: Note) => <Detail note={n} all={all} onPick={setOpenP} phone={phone} layout={phone ? 'stack' : 'row'} />
   const grid = shown.length ? (
-    <div key={show + cat + sort} className="fade-in grid gap-x-3.5 gap-y-5" style={{ gridTemplateColumns: phone ? 'repeat(3, minmax(0, 1fr))' : 'repeat(auto-fill, minmax(150px, 1fr))' }}>
-      {shown.map((n) => <Poster key={n.path} note={n} onClick={() => setOpenP(n.path)} selected={openP === n.path} />)}
-    </div>
+    <div key={show + cat + sort} className="fade-in"><ExpandGrid items={shown} open={from === 'grid' ? openP : null} onOpen={(p) => { setFrom('grid'); setHover(null); setOpenP(p) }} minCol={150} gap={14} cols={phone ? 3 : undefined} render={rowDetail} phone={phone} onHover={onHover} /></div>
   ) : <Empty icon="film">Nessun titolo con questi filtri.</Empty>
   const hero = picks[0]
 
   return (
-    <div className={clsx('flex flex-col gap-4 transition-[padding] duration-200 ease-out', !phone && cur && 'min-[1100px]:pr-[452px]')}>
+    <div className="flex flex-col gap-4">
       {!phone && (
         <PageHead dot={section('film').dot} title="Film e serie" sub={`${all.length} titoli · cartella ${ROOT}`}>
           <Button variant="primary" icon="plus" onClick={() => setAdding(true)}>Aggiungi titolo</Button>
@@ -349,18 +420,12 @@ export default function Film({ phone }: { phone?: boolean }) {
       </div>
       {!phone && picks.length > 0 && (
         <Card title="Proposte di oggi" right={<><span className="text-[13px] text-mu hidden md:inline">Dai “da vedere”, cambiano ogni giorno</span><IconButton icon="sync" label="Altre proposte" size={30} onClick={more} /></>}>
-          <div className="grid gap-3.5" style={{ gridTemplateColumns: 'repeat(6, minmax(0, 1fr))' }}>
-            {picks.map((n) => <Poster key={n.path} note={n} onClick={() => setOpenP(n.path)} selected={openP === n.path} />)}
-          </div>
+          <ExpandGrid items={picks} open={from === 'picks' ? openP : null} onOpen={(p) => { setFrom('picks'); setHover(null); setOpenP(p) }} minCol={150} cols={6} gap={14} render={rowDetail} onHover={onHover} />
         </Card>
       )}
       {filters}
       {grid}
-      {phone ? (
-        <Sheet open={!!cur} onOpenChange={(o) => !o && setOpenP(null)} title={cur?.title || 'Scheda'} hideTitle><div key={cur?.path} className="fade-in" {...swipe}>{detail}</div></Sheet>
-      ) : (
-        <SidePanel note={cur ?? null} nav={nav} onClose={close}>{detail}</SidePanel>
-      )}
+      {hover && !phone && <HoverCard note={all.find((x) => x.path === hover.n.path) ?? hover.n} rect={hover.r} onOpen={() => { setFrom(picks.includes(hover.n) && !shown.includes(hover.n) ? 'picks' : 'grid'); setOpenP(hover.n.path); setHover(null) }} onLeave={() => setHover(null)} />}
       <AddTitle open={adding} onClose={() => setAdding(false)} cats={cats} />
     </div>
   )
