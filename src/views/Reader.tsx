@@ -9,6 +9,7 @@ import { Button, IconButton, MoreMenu, type MenuEntry } from '../ui/kit'
 import { Icon } from '../ui/Icon'
 import Editor from './Editor'
 import { addIngredientsToShopping, ingredients } from './Ricette'
+import { RecipeView } from './RecipeView'
 
 /** Proprietà del frontmatter mostrate come pillole in testa alla nota. */
 const HIDE = new Set(['title', 'aliases', 'cssclasses', 'poster', 'created', 'lang'])
@@ -147,7 +148,7 @@ export default function Reader({ phone }: { phone?: boolean }) {
   if (reader.editing && raw != null)
     return <Editor key={reader.path} path={reader.path} base={raw} phone={phone} onDone={(saved) => { if (saved != null) setRaw(saved); st.setEditing(false) }} />
 
-  const article = (
+  const article = recipe ? <RecipeView n={recipe} phone={phone} /> : (
     <div className={clsx('min-w-0', !phone && 'flex-1')}>
       {missing ? <p className="text-mu">Questa nota non esiste più. Forse è stata spostata o rinominata.</p> : <Props fm={fm} />}
       <h1 className={clsx('m-0 mb-3 font-semibold tracking-[-0.015em] break-words', phone ? 'text-[24px]' : 'text-[28px] leading-tight')}>{title}</h1>
@@ -206,7 +207,7 @@ export default function Reader({ phone }: { phone?: boolean }) {
             <MoreMenu items={menu} size={44} />
           </>, slot)}
         {article}
-        {side}
+        {!recipe && side}
       </article>
     )
 
@@ -226,10 +227,12 @@ export default function Reader({ phone }: { phone?: boolean }) {
         <IconButton icon="download" label="Scarica il file .md" size={38} onClick={download} />
         <MoreMenu items={menu} size={38} />
       </div>
-      <div className="rounded-2xl bg-s1 border border-ln p-7 flex gap-8 items-start">
-        {article}
-        {side}
-      </div>
+      {recipe ? article : (
+        <div className="rounded-2xl bg-s1 border border-ln p-7 flex gap-8 items-start">
+          {article}
+          {side}
+        </div>
+      )}
     </article>
   )
 }
