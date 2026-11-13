@@ -55,6 +55,8 @@ interface State {
   loaded: boolean
   error: string | null
   route: SectionId
+  /** Posizione dentro la sezione (es. la cartella aperta in Note): sta nell'indirizzo, così indietro ci torna. */
+  sub: string | null
   reader: Reader | null
   stack: string[]
   searchOpen: boolean
@@ -67,6 +69,7 @@ interface State {
   setVault(v: Vault): Promise<void>
   refresh(): Promise<void>
   go(r: SectionId): void
+  goSub(sub: string | null): void
   open(path: string, head?: string): void
   back(): void
   closeReader(): void
@@ -108,15 +111,19 @@ const fail = (e: unknown) => {
  * alla schermata precedente, una alla volta.
  */
 const ROUTES = ['home', 'note', 'film', 'libri', 'ricette', 'miniature', 'giappone', 'impostazioni']
-function parseHash(h = location.hash): { route: SectionId; path?: string; head?: string } {
+function parseHash(h = location.hash): { route: SectionId; sub?: string; path?: string; head?: string } {
   const parts = (h || '').replace(/^#\/?/, '').split('/')
   const route = (ROUTES.includes(parts[0]) ? parts[0] : 'home') as SectionId
-  if (parts[1] === 'n' && parts[2]) {
-    try { return { route, path: decodeURIComponent(parts[2]), head: parts[3] ? decodeURIComponent(parts[3]) : undefined } } catch { /* indirizzo rovinato */ }
-  }
-  return { route }
+  const out: { route: SectionId; sub?: string; path?: string; head?: string } = { route }
+  try {
+    let i = 1
+    if (parts[i] === 'd' && parts[i + 1]) { out.sub = decodeURIComponent(parts[i + 1]); i += 2 }
+    if (parts[i] === 'n' && parts[i + 1]) { out.path = decodeURIComponent(parts[i + 1]); if (parts[i + 2]) out.head = decodeURIComponent(parts[i + 2]) }
+  } catch { /* indirizzo rovinato */ }
+  return out
 }
-const hashFor = (route: SectionId, path?: string, head?: string) => '#/' + route + (path ? '/n/' + encodeURIComponent(path) + (head ? '/' + encodeURIComponent(head) : '') : '')
+const hashFor = (route: SectionId, path?: string, head?: string, sub?: string | null) =>
+  '#/' + route + (sub ? '/d/' + encodeURIComponent(sub) : '') + (path ? '/n/' + encodeURIComponent(path) + (head ? '/' + encodeURIComponent(head) : '') : '')
 const routeFromHash = (): SectionId => parseHash().route
 /** Profondità della voce corrente nella cronologia dell'app (salvata nella voce stessa, sopravvive al ricaricamento). */
 /** Nuova voce nella cronologia; se sono sulla voce di una finestra aperta, la sostituisco (la finestra si chiude). */
@@ -126,6 +133,23 @@ function setHash(h: string) {
     if (onOverlayEntry()) location.replace(h)
     else location.hash = h
   })
+}
+/** Posizione di scorrimento di ogni schermata, per ritrovarla tornando indietro. */
+const scrolls = new Map<string, number>()
+if (typeof window !== 'undefined') {
+  history.scrollRestoration = 'manual'
+  let raf = 0
+  window.addEventListener('scroll', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => scrolls.set(location.hash || '#/home', window.scrollY)) }, { passive: true })
+}
+/** Dopo un cambio di schermata: avanti → in cima; indietro → dove ero (aspetta che la pagina sia abbastanza lunga). */
+export function restoreScroll() {
+  const y = dir === 'pop' ? scrolls.get(location.hash || '#/home') ?? 0 : 0
+  let n = 0
+  const tryIt = () => {
+    window.scrollTo(0, y)
+    if (Math.abs(window.scrollY - y) > 2 && n++ < 30) requestAnimationFrame(tryIt)
+  }
+  tryIt()
 }
 /** Direzione dell'ultimo cambio di schermata (per l'animazione: avanti entra da destra, indietro da sinistra). */
 let dir: 'push' | 'pop' = 'push'
@@ -167,6 +191,7 @@ export const useStore = create<State>((set, get) => {
     loaded: false,
     error: null,
     route: typeof location !== 'undefined' ? routeFromHash() : 'home',
+    sub: typeof location !== 'undefined' ? parseHash().sub ?? null : null,
     reader: null,
     stack: [],
     searchOpen: false,
@@ -194,24 +219,29 @@ export const useStore = create<State>((set, get) => {
     },
     go(r) {
       dir = 'push'
-      set({ route: r, reader: null, stack: [] })
+      set({ route: r, sub: null, reader: null, stack: [] })
       setHash(hashFor(r))
+    },
+    goSub(sub) {
+      dir = 'push'
+      set({ sub, reader: null, stack: [] })
+      setHash(hashFor(get().route, undefined, undefined, sub))
     },
     open(path, head) {
       dir = 'push'
       const cur = get().reader
       set({ reader: { path, editing: false, head }, stack: cur && cur.path !== path ? [...get().stack, cur.path] : get().stack })
-      setHash(hashFor(get().route, path, head))
+      setHash(hashFor(get().route, path, head, get().sub))
     },
     back() {
       // torna alla schermata precedente vera (stessa cosa del tasto indietro del mouse o di Android)
       if (depth > 0) { history.back(); return }
       const r = get().reader
-      if (r) { set({ reader: null, stack: [] }); history.replaceState({ d: 0 }, '', hashFor(get().route)); trail[0] = location.hash }
+      if (r) { set({ reader: null, stack: [] }); history.replaceState({ d: 0 }, '', hashFor(get().route, undefined, undefined, get().sub)); trail[0] = location.hash }
     },
     closeReader() {
       set({ reader: null, stack: [] })
-      history.replaceState({ d: depth }, '', hashFor(get().route))
+      history.replaceState({ d: depth }, '', hashFor(get().route, undefined, undefined, get().sub))
     },
     setEditing(on) {
       const r = get().reader
@@ -417,12 +447,12 @@ function applyHash() {
   else { dir = 'push'; depth += 1; history.replaceState({ d: depth }, '') }
   if (trail.length > 1 && trail[trail.length - 2] === h) trail.pop()
   else if (trail[trail.length - 1] !== h) trail.push(h)
-  const { route, path, head } = parseHash(h)
+  const { route, path, head, sub = null } = parseHash(h)
   const st = useStore.getState()
   const stack = trail.slice(0, -1).map((x) => parseHash(x).path).filter((x): x is string => !!x)
   if (path) {
-    if (st.route !== route || st.reader?.path !== path || st.reader?.head !== head) useStore.setState({ route, reader: { path, editing: false, head }, stack })
-  } else if (st.route !== route || st.reader) useStore.setState({ route, reader: null, stack: [] })
+    if (st.route !== route || st.sub !== sub || st.reader?.path !== path || st.reader?.head !== head) useStore.setState({ route, sub, reader: { path, editing: false, head }, stack })
+  } else if (st.route !== route || st.sub !== sub || st.reader) useStore.setState({ route, sub, reader: null, stack: [] })
 }
 if (typeof window !== 'undefined') {
   window.addEventListener('hashchange', applyHash)

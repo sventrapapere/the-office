@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { useStore, inDir } from '../store'
-import { useBackClose } from '../lib/backstack'
 import { section, SECTIONS } from '../sections'
 import { Kbd, Card, Chip, PageHead, Badge, Button, Empty, MoreMenu, relTime } from '../ui/kit'
 import { NoteTile } from '../ui/notes'
@@ -89,10 +88,10 @@ export default function NoteView({ phone }: { phone?: boolean }) {
   const notes = useStore((s) => s.notes)
   const st = useStore.getState()
   const [view, setView] = useState<View>('tutto')
-  const [dir, setDirRaw] = useState<string | null>(null)
-  // la cartella si apre al suo posto; indietro risale di un livello
-  const setDir = setDirRaw
-  useBackClose(!!dir, () => setDirRaw(dir && dir.includes('/') ? dir.split('/').slice(0, -1).join('/') : null), dir)
+  // la cartella aperta sta nell'indirizzo (#/note/d/<cartella>): tornando indietro da una nota si riapre
+  const dir = useStore((s) => s.sub)
+  const setDir = (d: string | null) => st.goSub(d)
+  const setDirRaw = setDir
   const [tag, setTag] = useState<string | null>(null)
   const visible = notes.filter((n) => !HIDDEN_TOP.has(n.top))
   const inbox = useMemo(() => inDir(notes, INBOX_DIR).sort((a, b) => b.mtime - a.mtime), [notes])

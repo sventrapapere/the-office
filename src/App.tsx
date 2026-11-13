@@ -1,6 +1,6 @@
-import { useEffect, useState, lazy, Suspense } from 'react'
+import { useEffect, useLayoutEffect, useState, lazy, Suspense } from 'react'
 import { Toaster } from 'sonner'
-import { navDir, useStore, type SectionId } from './store'
+import { navDir, restoreScroll, useStore, type SectionId } from './store'
 import { SECTIONS, orderedSections } from './sections'
 import { Dock, TopBar } from './ui/Shell'
 import { PhoneShell } from './ui/PhoneShell'
@@ -101,6 +101,8 @@ export default function App() {
   useShortcuts(wide)
   const route = useStore((s) => s.route)
   const reader = useStore((s) => s.reader)
+  const sub = useStore((s) => s.sub)
+  useLayoutEffect(() => { restoreScroll() }, [route, sub, reader?.path])
   const loaded = useStore((s) => s.loaded)
   const error = useStore((s) => s.error)
   const light = useStore((s) => s.settings.theme === 'light')
