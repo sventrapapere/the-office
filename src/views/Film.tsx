@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
+import { useMemo, useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import clsx from 'clsx'
 import { useStore, inDir } from '../store'
 import { section } from '../sections'
@@ -207,9 +207,8 @@ function Detail({ note, all, onPick, phone, layout = 'stack' }: { note: Note; al
  * A — la scheda si apre nella riga della locandina: la riga diventa larga quanto la griglia, con la locandina
  * a sinistra e la scheda accanto; gli altri titoli di quella riga scendono a quella dopo.
  */
-function ExpandGrid({ items, open, onOpen, minCol, cols: fixedCols, gap, render, phone, onHover }: {
+function ExpandGrid({ items, open, onOpen, minCol, cols: fixedCols, gap, render, phone }: {
   items: Note[]; open: string | null; onOpen: (p: string | null) => void; minCol: number; cols?: number; gap: number; render: (n: Note) => React.ReactNode; phone?: boolean
-  onHover?: (n: Note, el: HTMLElement | null) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [w, setW] = useState(0)
@@ -228,9 +227,17 @@ function ExpandGrid({ items, open, onOpen, minCol, cols: fixedCols, gap, render,
   const after = i < 0 ? [] : [...items.slice(rowStart, i), ...items.slice(i + 1)]
   const sel = i < 0 ? null : items[i]
   const selRef = useRef<HTMLDivElement>(null)
-  useEffect(() => { if (sel) selRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }) }, [sel?.path]) // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const el = selRef.current
+    if (!sel || !el) return
+    if (anchor.current != null) { window.scrollBy(0, el.getBoundingClientRect().top - anchor.current); anchor.current = null }
+    const r = el.getBoundingClientRect()
+    if (r.bottom > window.innerHeight || r.top < 60) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [sel?.path]) // eslint-disable-line react-hooks/exhaustive-deps
+  // la locandina cliccata resta ferma sullo schermo: la riga si apre lì anche se se ne chiude un'altra più su
+  const anchor = useRef<number | null>(null)
   const poster = (n: Note) => (
-    <div key={n.path} className="min-w-0" onMouseEnter={(e) => onHover && open !== n.path && onHover(n, e.currentTarget)} onMouseLeave={() => onHover?.(n, null)}>
+    <div key={n.path} className="min-w-0" onClickCapture={(e) => { anchor.current = e.currentTarget.getBoundingClientRect().top }}>
       <Poster note={n} onClick={() => onOpen(open === n.path ? null : n.path)} selected={open === n.path} />
     </div>
   )
@@ -251,38 +258,6 @@ function ExpandGrid({ items, open, onOpen, minCol, cols: fixedCols, gap, render,
   )
 }
 
-/** C — anteprima al passaggio del mouse: la locandina si ingrandisce in una schedina con le azioni rapide. */
-function HoverCard({ note, rect, onOpen, onLeave }: { note: Note; rect: DOMRect; onOpen: () => void; onLeave: () => void }) {
-  const src = usePoster(note)
-  const st = useStore.getState()
-  const W = Math.max(300, rect.width * 1.9)
-  const left = Math.min(Math.max(12, rect.left + rect.width / 2 - W / 2), window.innerWidth - W - 12)
-  const top = Math.max(12, rect.top - 24)
-  const set = async (p: Record<string, unknown>, label: string) => {
-    let t = (await st.vault!.read(note.path)) ?? ''
-    for (const [k, v] of Object.entries(p)) t = setFM(t, k, v as never)
-    await st.write(note.path, t, { undoLabel: label + ': ' + note.title })
-  }
-  return (
-    <div onMouseLeave={onLeave} className="hover-in fixed z-40 rounded-2xl bg-s1 border border-ol shadow-[var(--shadow)] overflow-hidden" style={{ left, top, width: W }}>
-      <button type="button" onClick={onOpen} className="relative block w-full aspect-[16/9] bg-s2 overflow-hidden cursor-pointer">
-        {src ? <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" referrerPolicy="no-referrer" /> : <Icon name="film" size={26} className="text-mu absolute inset-0 m-auto" />}
-        <span className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-s1 to-transparent" />
-      </button>
-      <div className="p-4 pt-1 flex flex-col gap-2.5">
-        <div className="text-[17px] font-semibold leading-tight">{note.title}</div>
-        <div className="text-[12px] text-mu">{[catOf(note), note.fm.anno, platform(note), note.fm.durata && fmStr(note.fm.durata)].filter(Boolean).join(' · ')}</div>
-        <div className="flex items-center gap-2">
-          {seen(note)
-            ? <Stars value={num(note.fm.voto) ?? 0} onChange={(v) => set({ voto: v || null }, 'Voto ' + (v || 'tolto'))} size={20} />
-            : <Button variant="accent" icon="check" onClick={() => set({ visto: true, in_corso: null, visto_il: todayKey() }, 'Visto')}>Segna visto</Button>}
-          <span className="flex-1" />
-          <Button variant="secondary" onClick={onOpen}>Scheda</Button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 
 /** Nuovo titolo: crea la nota con lo stesso formato delle altre schede. */
@@ -395,12 +370,9 @@ export default function Film({ phone }: { phone?: boolean }) {
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
   }, [cur, close, go])
-  const [hover, setHover] = useState<{ n: Note; r: DOMRect } | null>(null)
-  const hoverT = useRef(0)
-  const onHover = (n: Note, el: HTMLElement | null) => { clearTimeout(hoverT.current); if (!el || phone) return; hoverT.current = window.setTimeout(() => setHover({ n, r: el.getBoundingClientRect() }), 450) }
   const rowDetail = (n: Note) => <Detail note={n} all={all} onPick={setOpenP} phone={phone} layout={phone ? 'stack' : 'row'} />
   const grid = shown.length ? (
-    <div key={show + cat + sort} className="fade-in"><ExpandGrid items={shown} open={from === 'grid' ? openP : null} onOpen={(p) => { setFrom('grid'); setHover(null); setOpenP(p) }} minCol={150} gap={14} cols={phone ? 3 : undefined} render={rowDetail} phone={phone} onHover={onHover} /></div>
+    <div key={show + cat + sort} className="fade-in"><ExpandGrid items={shown} open={from === 'grid' ? openP : null} onOpen={(p) => { setFrom('grid'); setOpenP(p) }} minCol={150} gap={14} cols={phone ? 3 : undefined} render={rowDetail} phone={phone} /></div>
   ) : <Empty icon="film">Nessun titolo con questi filtri.</Empty>
   const hero = picks[0]
 
@@ -420,12 +392,11 @@ export default function Film({ phone }: { phone?: boolean }) {
       </div>
       {!phone && picks.length > 0 && (
         <Card title="Proposte di oggi" right={<><span className="text-[13px] text-mu hidden md:inline">Dai “da vedere”, cambiano ogni giorno</span><IconButton icon="sync" label="Altre proposte" size={30} onClick={more} /></>}>
-          <ExpandGrid items={picks} open={from === 'picks' ? openP : null} onOpen={(p) => { setFrom('picks'); setHover(null); setOpenP(p) }} minCol={150} cols={6} gap={14} render={rowDetail} onHover={onHover} />
+          <ExpandGrid items={picks} open={from === 'picks' ? openP : null} onOpen={(p) => { setFrom('picks'); setOpenP(p) }} minCol={150} cols={6} gap={14} render={rowDetail} />
         </Card>
       )}
       {filters}
       {grid}
-      {hover && !phone && <HoverCard note={all.find((x) => x.path === hover.n.path) ?? hover.n} rect={hover.r} onOpen={() => { setFrom(picks.includes(hover.n) && !shown.includes(hover.n) ? 'picks' : 'grid'); setOpenP(hover.n.path); setHover(null) }} onLeave={() => setHover(null)} />}
       <AddTitle open={adding} onClose={() => setAdding(false)} cats={cats} />
     </div>
   )
