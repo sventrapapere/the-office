@@ -17,6 +17,8 @@ tags: [dashboard, meta]
 - Va rilanciato solo se cambia il codice Rust in questa cartella (`src/`). Le modifiche a `index.html` si vedono riaprendo l'app o premendo **F5**.
 
 ## Come funziona
+- **Dalla 2.1** la finestra non ha la cornice di Windows: la barra del titolo (nome, ricerca, sincronizzazione, Claude, riduci/ingrandisci/chiudi) la disegna la pagina e comanda la finestra con `POST /_api/window?do=minimize|maximize|close|drag`. Si trascina dalle zone libere, doppio clic ingrandisce, i bordi ridimensionano.
+- I sorgenti di questa cartella sono anche nel repository `sventrapapere/the-office` (cartella `desktop/`): a ogni modifica GitHub li compila su Windows per verificarli (release `desktop-latest`).
 - L'app non contiene la dashboard: la legge dal vault a ogni avvio da `http://office.localhost/_dashboard/index.html` (indirizzo interno, nessuna porta aperta).
 - La pagina legge e scrive il vault tramite `/_api/...` (vedi commento in cima a `src/main.rs`): niente più richieste di permesso.
 - Quando cambi una nota (anche da Obsidian) la dashboard si aggiorna da sola.
