@@ -90,8 +90,8 @@ export default function NoteView({ phone }: { phone?: boolean }) {
   const st = useStore.getState()
   const [view, setView] = useState<View>('tutto')
   const [dir, setDirRaw] = useState<string | null>(null)
-  // aprire una cartella la mostra da sola, in cima; indietro risale di un livello
-  const setDir = (d: string | null) => { setDirRaw(d); if (d) { setView('cartelle'); window.scrollTo({ top: 0 }) } }
+  // la cartella si apre al suo posto; indietro risale di un livello
+  const setDir = setDirRaw
   useBackClose(!!dir, () => setDirRaw(dir && dir.includes('/') ? dir.split('/').slice(0, -1).join('/') : null), dir)
   const [tag, setTag] = useState<string | null>(null)
   const visible = notes.filter((n) => !HIDDEN_TOP.has(n.top))
@@ -108,9 +108,9 @@ export default function NoteView({ phone }: { phone?: boolean }) {
   const show = (v: View) => view === 'tutto' || view === v
 
   const inboxCard = (
-    <Card title="Inbox" plain={phone} className="h-full" bodyClass={phone ? 'px-3 pb-3 gap-2' : 'flex-1'} right={<Badge>{phone ? inbox.length : inbox.length + ' da smistare'}</Badge>}>
+    <Card title="Inbox" plain={phone} className={'h-full' + (view === 'tutto' ? phone ? ' min-h-[220px]' : ' min-h-[460px]' : '')} bodyClass={phone ? 'px-3 pb-3 gap-2 flex-1' : 'flex-1'} right={<Badge>{phone ? inbox.length : inbox.length + ' da smistare'}</Badge>}>
       {!inbox.length && <Empty icon="inbox">Inbox vuota. Quello che catturi al volo finisce qui.</Empty>}
-      {inbox.slice(0, view === 'inbox' ? 100 : 6).map((n) => (
+      {inbox.slice(0, view === 'inbox' ? 100 : 7).map((n) => (
         <div key={n.path} className="flex items-center gap-3 min-h-[64px] pl-3.5 pr-2 py-2 rounded-lg bg-s2">
           <button type="button" onClick={() => st.open(n.path)} className="flex-1 min-w-0 text-left cursor-pointer">
             <span className="block truncate">{n.title.replace(/^\d{4}-\d{2}-\d{2} \d{2}\.\d{2} — /, '')}</span>
@@ -121,10 +121,10 @@ export default function NoteView({ phone }: { phone?: boolean }) {
               : <button type="button" className="press h-9 px-3 rounded-lg border border-ln bg-s1 inline-flex items-center gap-2 text-[13px] font-semibold cursor-pointer hov"><Icon name="folder" size={15} />Sposta in…</button>} />
         </div>
       ))}
-      {view !== 'inbox' && inbox.length > 6 && <Button variant="link" onClick={() => setView('inbox')}>Tutte le {inbox.length}</Button>}
-      {!phone && inbox.length > 0 && inbox.length < 3 && (
-        <button type="button" onClick={() => st.set('captureOpen', true)} className="mt-auto flex items-center gap-2 min-h-[44px] px-3.5 rounded-lg border border-dashed border-ln text-mu text-[13px] text-left cursor-pointer hov">
-          <Icon name="plus" size={15} /><span className="flex-1">Cattura un'idea al volo</span><Kbd>Ctrl N</Kbd>
+      {view !== 'inbox' && inbox.length > 7 && <Button variant="link" onClick={() => setView('inbox')}>Tutte le {inbox.length}</Button>}
+      {inbox.length > 0 && inbox.length < 5 && (
+        <button type="button" onClick={() => st.set('captureOpen', true)} className="flex-1 min-h-[64px] flex flex-col items-center justify-center gap-1.5 px-3.5 rounded-lg border border-dashed border-ln text-mu text-[13px] cursor-pointer hov">
+          <Icon name="plus" size={18} /><span>Cattura un'idea al volo</span>{!phone && <Kbd>Ctrl N</Kbd>}
         </button>
       )}
     </Card>
@@ -136,7 +136,7 @@ export default function NoteView({ phone }: { phone?: boolean }) {
     return [...c].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'it'))
   }, [know])
   const full = view === 'conoscenza'
-  const knowList = know.filter((n) => !full || !tag || firstTag(n) === tag).slice(0, full ? 200 : phone ? 5 : Math.max(3, Math.min(6, inbox.length + 2)))
+  const knowList = know.filter((n) => !full || !tag || firstTag(n) === tag).slice(0, full ? 200 : 7)
   const knowRows = (
     <>
       {!know.length && <Empty icon="note">Ancora niente.</Empty>}
