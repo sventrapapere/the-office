@@ -1,10 +1,12 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import clsx from 'clsx'
 import { useStore, inDir } from '../store'
 import { section } from '../sections'
 import { Card, Chip, PageHead, Seg, Button, IconButton, Empty, Stat, inputCls } from '../ui/kit'
 import { Stars, Tag } from '../ui/notes'
 import { Modal, Sheet } from '../ui/Sheet'
+import { useBackClose } from '../lib/backstack'
+import { useTitleBar } from '../ui/TitleBar'
 import { Icon, type IconName } from '../ui/Icon'
 import { useAssetUrl } from '../lib/assets'
 import { fmStr, byTitle, mdRender, setFM, type Note } from '../lib/md'
@@ -67,85 +69,163 @@ function Poster({ note, onClick, selected }: { note: Note; onClick: () => void; 
   )
 }
 
-/** Scheda del titolo: stato, voto, commento, saga. Le modifiche si salvano insieme con "Salva". */
-function Detail({ note, all, onPick, onClose, phone }: { note: Note; all: Note[]; onPick: (p: string) => void; onClose: () => void; phone?: boolean }) {
+/** Riga informativa della scheda. */
+const Info = ({ k, children }: { k: string; children: React.ReactNode }) => (
+  <div className="flex gap-3 min-h-[34px] items-baseline py-1.5 border-b border-ln last:border-b-0">
+    <dt className="w-[92px] flex-none text-[13px] text-mu">{k}</dt><dd className="m-0 flex-1 min-w-0 text-[14px]">{children}</dd>
+  </div>
+)
+
+/** Contatore − n + per stagione ed episodio. */
+function Counter({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-[13px] text-mu mr-1">{label}</span>
+      <IconButton icon="minus" label={label + ' meno uno'} size={30} onClick={() => onChange(Math.max(0, value - 1))} className="border border-ln" />
+      <span className="num w-7 text-center font-semibold">{value}</span>
+      <IconButton icon="plus" label={label + ' più uno'} size={30} onClick={() => onChange(value + 1)} className="border border-ln" />
+    </div>
+  )
+}
+
+/** Scheda del titolo: ogni modifica si salva subito (con "Annulla" nel messaggio). */
+function Detail({ note, all, onPick, phone }: { note: Note; all: Note[]; onPick: (p: string) => void; phone?: boolean }) {
   const vault = useStore((s) => s.vault)!
   const st = useStore.getState()
   const fm = note.fm
   const src = usePoster(note)
-  const state0 = seen(note) ? 'visto' : watching(note) ? 'corso' : 'todo'
-  const [state, setState] = useState<'todo' | 'corso' | 'visto'>(state0)
-  const [vote, setVote] = useState<number>(num(fm.voto) ?? 0)
+  const state = seen(note) ? 'visto' : watching(note) ? 'corso' : 'todo'
   const [comment, setComment] = useState(fmStr(fm.commento))
-  useEffect(() => { setState(state0); setVote(num(fm.voto) ?? 0); setComment(fmStr(fm.commento)) }, [note.path, note.mtime]) // eslint-disable-line react-hooks/exhaustive-deps
-  const dirty = state !== state0 || vote !== (num(fm.voto) ?? 0) || comment !== fmStr(fm.commento)
-  const save = async () => {
+  const [more, setMore] = useState(false)
+  useEffect(() => { setComment(fmStr(fm.commento)); setMore(false) }, [note.path]) // eslint-disable-line react-hooks/exhaustive-deps
+  const patch = async (p: Record<string, unknown>, label: string) => {
     let t = (await vault.read(note.path)) ?? ''
-    t = setFM(t, 'visto', state === 'visto')
-    t = setFM(t, 'in_corso', state === 'corso' ? true : null)
-    if (state === 'visto' && !seen(note)) t = setFM(t, 'visto_il', todayKey())
-    if (state !== 'visto') t = setFM(t, 'visto_il', null)
-    t = setFM(t, 'voto', vote || null)
-    t = setFM(t, 'commento', comment.trim() || null)
-    await st.write(note.path, t, { undoLabel: state === 'visto' && !seen(note) ? 'Segnato come visto' : 'Scheda salvata' })
-    onClose()
+    for (const [k, v] of Object.entries(p)) t = setFM(t, k, v as never)
+    await st.write(note.path, t, { undoLabel: label + ': ' + note.title })
   }
+  const setState = (v: 'todo' | 'corso' | 'visto') => {
+    if (v === state) return
+    patch({ visto: v === 'visto', in_corso: v === 'corso' ? true : null, visto_il: v === 'visto' ? todayKey() : null }, v === 'visto' ? 'Visto' : v === 'corso' ? 'In corso' : 'Da vedere')
+  }
+  const serie = catOf(note) === 'Serie TV' || /stag|\bep\b|episod/i.test(fmStr(fm.durata))
+  const season = num(fm.stagione) ?? 1, ep = num(fm.episodio) ?? 0
   let body = note.body.replace(/^\s*#\s+[^\n]*\n/, '')
   const m = body.match(/(^|\n)##\s+Note personali\s*\n([\s\S]*)$/i)
   if (m) body = body.slice(0, m.index)
   const html = mdRender(body, { notes: all, from: note.path }, -1e6)
   const eps = fm.saga ? all.filter((x) => String(x.fm.saga || '') === String(fm.saga)).sort((a, b) => sagaOrd(a) - sagaOrd(b) || byTitle(a, b)) : []
   const trailer = typeof fm.trailer === 'string' && /^https?:/.test(fm.trailer) ? fm.trailer : null
+  const ext = (u: string) => (vault.openExternal ? vault.openExternal(u) : open(u, '_blank'))
+  const pls = list(fm.piattaforma)
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex gap-4">
-        <span className="w-[96px] flex-none aspect-[2/3] rounded-[10px] overflow-hidden border border-ln bg-s2 relative flex items-center justify-center">
-          {src ? <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" referrerPolicy="no-referrer" /> : <Icon name="film" size={20} className="text-mu" />}
+        <span className={clsx('flex-none aspect-[2/3] rounded-[10px] overflow-hidden border border-ln bg-s2 relative flex items-center justify-center', phone ? 'w-[96px]' : 'w-[132px]')}>
+          {src ? <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" referrerPolicy="no-referrer" /> : <Icon name="film" size={22} className="text-mu" />}
+          {watching(note) && <span className="absolute top-2 left-2 h-5 px-1.5 rounded-md bg-ac text-[#1A0A02] text-[11px] font-semibold inline-flex items-center">in corso</span>}
         </span>
-        <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-          <div className="text-[22px] font-semibold leading-tight">{note.title}</div>
+        <div className="flex-1 min-w-0 flex flex-col gap-1.5 pt-0.5">
+          <div className="text-[22px] font-semibold leading-tight tracking-[-0.01em]">{note.title}</div>
           {fm.titolo_originale && fmStr(fm.titolo_originale) !== note.title && <div className="text-[13px] text-mu">{fmStr(fm.titolo_originale)}</div>}
-          <div className="text-[13px] text-mu">{[catOf(note), fm.anno, platform(note), fm.durata && fmStr(fm.durata)].filter(Boolean).join(' · ')}</div>
-          <div className="flex flex-wrap gap-1">{list(fm.genere).map((g) => <Tag key={g} strong>{g}</Tag>)}</div>
+          <div className="text-[13px] text-mu">{[catOf(note), fm.anno].filter(Boolean).join(' · ')}</div>
+          <div className="flex flex-wrap gap-1 mt-0.5">{list(fm.genere).slice(0, 4).map((g) => <Tag key={g} strong>{g}</Tag>)}</div>
+          {seen(note) && <div className="mt-auto"><Stars value={num(fm.voto) ?? 0} onChange={(v) => patch({ voto: v || null }, v ? `Voto ${v}` : 'Voto tolto')} size={phone ? 28 : 22} /></div>}
         </div>
       </div>
-      <div className="flex flex-col gap-1.5">
-        <span className="text-[13px] text-mu">Stato</span>
-        <Seg label="Stato" value={state} onChange={setState} size="lg" full options={[{ id: 'todo', label: 'Da vedere' }, { id: 'corso', label: 'In corso' }, { id: 'visto', label: 'Visto' }]} />
-      </div>
-      {state === 'visto' && (
-        <>
-          <div className="flex flex-col gap-1">
-            <span className="text-[13px] text-mu">Il tuo voto</span>
-            <Stars value={vote} onChange={(v) => setVote(v ?? 0)} size={phone ? 30 : 24} />
-          </div>
-          <label className="flex flex-col gap-1">
-            <span className="text-[13px] text-mu">Commento</span>
-            <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Due parole su com’era" className={inputCls} />
-          </label>
-        </>
+
+      <Seg label="Stato" value={state} onChange={setState} size="lg" full options={[{ id: 'todo', label: 'Da vedere' }, { id: 'corso', label: 'In corso' }, { id: 'visto', label: 'Visto' }]} />
+
+      {state === 'corso' && serie && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2.5 p-3 rounded-lg bg-s2">
+          <Counter label="Stagione" value={season} onChange={(v) => patch({ stagione: v || null, episodio: v !== season ? 0 : ep }, 'Stagione ' + v)} />
+          <Counter label="Episodio" value={ep} onChange={(v) => patch({ stagione: season, episodio: v }, 'Episodio ' + v)} />
+          <Button variant="accent" icon="plus" onClick={() => patch({ stagione: season, episodio: ep + 1 }, `S${season} E${ep + 1}`)} className="ml-auto">1 episodio</Button>
+        </div>
       )}
+
+      {state === 'visto' && (
+        <input value={comment} onChange={(e) => setComment(e.target.value)} onBlur={() => comment.trim() !== fmStr(fm.commento) && patch({ commento: comment.trim() || null }, 'Commento salvato')}
+          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} placeholder="Due parole su com’era (si salva da solo)" aria-label="Commento" className={inputCls} />
+      )}
+
+      <dl className="m-0 flex flex-col">
+        {pls.length > 0 && <Info k="Dove vederlo">{pls.join(', ')}</Info>}
+        {fm.durata && <Info k={serie ? 'Stagioni' : 'Durata'}>{fmStr(fm.durata)}</Info>}
+        {fm.anno && <Info k="Anno">{fmStr(fm.anno)}</Info>}
+        {seen(note) && fm.visto_il && <Info k="Visto il">{new Date(fmStr(fm.visto_il)).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</Info>}
+        {state === 'corso' && serie && <Info k="A che punto"><span className="num">S{season} · E{ep}</span></Info>}
+      </dl>
+
       {eps.length > 1 && (
         <div>
           <div className="flex items-center justify-between text-[13px] text-mu mb-1.5"><span>Saga · {fmStr(fm.saga)}</span><span className="num">{eps.filter(seen).length}/{eps.length} visti</span></div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-col">
             {eps.map((x) => (
-              <button key={x.path} type="button" onClick={() => onPick(x.path)} aria-current={x === note} title={x.title} className={'h-8 min-w-8 px-2 rounded-md border text-[12px] inline-flex items-center justify-center gap-1 cursor-pointer ' + (x === note ? 'border-tx text-tx bg-s3' : 'border-ln text-mu hov')}>
-                <b className="num">{fmStr(x.fm.saga_ordine) || '·'}</b>{seen(x) && <Icon name="check" size={11} stroke={2.6} />}
+              <button key={x.path} type="button" onClick={() => onPick(x.path)} aria-current={x === note} className={clsx('flex items-center gap-2.5 min-h-[36px] px-2 rounded-md text-left text-[14px] cursor-pointer', x === note ? 'bg-s3 text-tx' : 'text-mu hov')}>
+                <b className="num w-5 text-center">{fmStr(x.fm.saga_ordine) || '·'}</b><span className="flex-1 truncate">{x.title}</span>{seen(x) && <Icon name="check" size={13} stroke={2.6} className="text-ok" />}
               </button>
             ))}
           </div>
         </div>
       )}
-      {!phone && <div className="md text-[14px] text-mu" dangerouslySetInnerHTML={{ __html: html }} />}
-      <div className="flex gap-2 sticky bottom-0 bg-s1 pt-2">
+
+      {body.trim() && (
+        <div>
+          <div className={clsx('md text-[14px] text-mu', !more && 'line-clamp-4')} dangerouslySetInnerHTML={{ __html: html }} />
+          <Button variant="link" onClick={() => setMore((v) => !v)}>{more ? 'Meno' : 'Altro'}</Button>
+        </div>
+      )}
+
+      <div className="flex gap-2 sticky bottom-0 bg-s1 pt-2 pb-1">
         <Button size="lg" icon="note" onClick={() => st.open(note.path)} className="flex-1">Apri la nota</Button>
-        {trailer && !phone && <Button size="lg" variant="ghost" icon="external" onClick={() => (vault.openExternal ? vault.openExternal(trailer) : open(trailer, '_blank'))}>Trailer</Button>}
-        <Button size="lg" variant="accent" onClick={save} disabled={!dirty} className="flex-1">Salva</Button>
+        {trailer && <Button size="lg" icon="external" onClick={() => ext(trailer)} className="flex-1">Trailer</Button>}
       </div>
     </div>
   )
+}
+
+/** PC: pannello a destra, la griglia resta usabile; ← → passano al titolo vicino, Esc chiude. */
+function SidePanel({ note, nav, onClose, children }: { note: Note | null; nav: { i: number; n: number; go: (d: number) => void }; onClose: () => void; children: React.ReactNode }) {
+  const tb = useTitleBar()
+  useBackClose(!!note, onClose)
+  useEffect(() => {
+    if (!note) return
+    const k = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).closest('input, textarea, [contenteditable]')) return
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'ArrowRight') { e.preventDefault(); nav.go(1) }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); nav.go(-1) }
+    }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [note, nav, onClose])
+  return (
+    <aside aria-label="Scheda del titolo" data-open={!!note} aria-hidden={!note}
+      className={clsx('side-panel fixed right-3 bottom-3 z-30 w-[440px] max-w-[calc(100vw-120px)] flex flex-col rounded-2xl bg-s1 border border-ln shadow-[var(--shadow)]', tb ? 'top-[52px]' : 'top-3')}>
+      <div className="flex items-center gap-1 h-[48px] pl-4 pr-2 border-b border-ln flex-none">
+        <span className="num text-[12px] text-mu flex-1">{nav.n ? `${nav.i + 1} di ${nav.n}` : ''}</span>
+        <IconButton icon="back" label="Titolo precedente (←)" size={32} onClick={() => nav.go(-1)} />
+        <IconButton icon="chev" label="Titolo successivo (→)" size={32} onClick={() => nav.go(1)} />
+        <IconButton icon="close" label="Chiudi (Esc)" size={32} onClick={onClose} />
+      </div>
+      <div key={note?.path} className="fade-in flex-1 overflow-y-auto px-5 pt-4">{children}</div>
+    </aside>
+  )
+}
+
+/** Telefono: scorrendo a destra/sinistra sulla scheda passo al titolo vicino. */
+function useSwipe(go: (d: number) => void) {
+  const start = useRef<[number, number] | null>(null)
+  return {
+    onTouchStart: (e: React.TouchEvent) => { const t = e.touches[0]; start.current = [t.clientX, t.clientY] },
+    onTouchEnd: (e: React.TouchEvent) => {
+      const s0 = start.current; start.current = null
+      if (!s0) return
+      const t = e.changedTouches[0], dx = t.clientX - s0[0], dy = t.clientY - s0[1]
+      if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.6) go(dx < 0 ? 1 : -1)
+    },
+  }
 }
 
 /** Nuovo titolo: crea la nota con lo stesso formato delle altre schede. */
@@ -216,7 +296,14 @@ export default function Film({ phone }: { phone?: boolean }) {
     await st.write(n.path, setFM(setFM(setFM(t, 'visto', true), 'in_corso', null), 'visto_il', todayKey()), { undoLabel: 'Segnato come visto: ' + n.title })
   }
 
-  const detail = cur && <Detail note={cur} all={all} onPick={setOpenP} onClose={() => setOpenP(null)} phone={phone} />
+  // titoli vicini: quelli della griglia (o delle proposte, se la scheda è stata aperta da lì)
+  const order = cur && !shown.includes(cur) ? picks : shown
+  const idx = cur ? order.indexOf(cur) : -1
+  const go = useCallback((d: number) => { if (idx < 0 || !order.length) return; setOpenP(order[(idx + d + order.length) % order.length].path) }, [idx, order])
+  const nav = useMemo(() => ({ i: idx, n: order.length, go }), [idx, order.length, go])
+  const close = useCallback(() => setOpenP(null), [])
+  const swipe = useSwipe(go)
+  const detail = cur && <Detail note={cur} all={all} onPick={setOpenP} phone={phone} />
   const filters = (
     <div className="flex flex-wrap items-center gap-2.5">
       <Seg label="Stato" value={show} onChange={setShow} size={phone ? 'md' : 'lg'} options={[
@@ -247,7 +334,7 @@ export default function Film({ phone }: { phone?: boolean }) {
   const hero = picks[0]
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className={clsx('flex flex-col gap-4 transition-[padding] duration-200 ease-out', !phone && cur && 'min-[1100px]:pr-[452px]')}>
       {!phone && (
         <PageHead dot={section('film').dot} title="Film e serie" sub={`${all.length} titoli · cartella ${ROOT}`}>
           <Button variant="primary" icon="plus" onClick={() => setAdding(true)}>Aggiungi titolo</Button>
@@ -270,11 +357,9 @@ export default function Film({ phone }: { phone?: boolean }) {
       {filters}
       {grid}
       {phone ? (
-        <Sheet open={!!cur} onOpenChange={(o) => !o && setOpenP(null)} title={cur?.title || 'Scheda'} hideTitle>{detail}</Sheet>
+        <Sheet open={!!cur} onOpenChange={(o) => !o && setOpenP(null)} title={cur?.title || 'Scheda'} hideTitle><div key={cur?.path} className="fade-in" {...swipe}>{detail}</div></Sheet>
       ) : (
-        <Modal open={!!cur} onOpenChange={(o) => !o && setOpenP(null)} title={cur?.title || 'Scheda'} hideTitle className="!top-[7vh] !w-[min(620px,calc(100vw-32px))] max-h-[86vh] overflow-y-auto">
-          <div className="p-5">{detail}</div>
-        </Modal>
+        <SidePanel note={cur ?? null} nav={nav} onClose={close}>{detail}</SidePanel>
       )}
       <AddTitle open={adding} onClose={() => setAdding(false)} cats={cats} />
     </div>
