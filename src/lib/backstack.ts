@@ -54,13 +54,14 @@ if (typeof window !== 'undefined') {
 }
 
 /** Collega una finestra/menu al tasto indietro. */
-export function useBackClose(open: boolean, close: () => void) {
+/** `key`: se cambia mentre è aperta (es. la cartella dopo essere risalito), la voce viene ricreata. */
+export function useBackClose(open: boolean, close: () => void, key?: unknown) {
   const id = useRef<number | null>(null)
   const closeRef = useRef(close)
   closeRef.current = close
   useEffect(() => {
     if (open && id.current == null) id.current = push(() => { id.current = null; closeRef.current() })
     else if (!open && id.current != null) { const x = id.current; id.current = null; pop(x) }
-  }, [open])
+  }, [open, key])
   useEffect(() => () => { if (id.current != null) { const x = id.current; id.current = null; pop(x) } }, [])
 }
