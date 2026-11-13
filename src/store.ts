@@ -99,10 +99,27 @@ const fail = (e: unknown) => {
   toast.error('Non sono riuscito a salvare', { description: String((e as Error)?.message || e) })
 }
 
-const routeFromHash = (): SectionId => {
-  const id = (location.hash || '').replace(/^#\/?/, '').split('/')[0]
-  return (['home', 'note', 'film', 'libri', 'ricette', 'miniature', 'giappone', 'impostazioni'].includes(id) ? id : 'home') as SectionId
+/**
+ * Navigazione nella cronologia: ogni schermata (sezione o nota aperta) ha il suo indirizzo
+ *   #/film            sezione
+ *   #/film/n/<nota>    nota aperta dalla sezione (con /<titoletto> opzionale)
+ * così il tasto "indietro" del mouse, il gesto indietro di Android e il pulsante ‹ tornano
+ * alla schermata precedente, una alla volta.
+ */
+const ROUTES = ['home', 'note', 'film', 'libri', 'ricette', 'miniature', 'giappone', 'impostazioni']
+function parseHash(h = location.hash): { route: SectionId; path?: string; head?: string } {
+  const parts = (h || '').replace(/^#\/?/, '').split('/')
+  const route = (ROUTES.includes(parts[0]) ? parts[0] : 'home') as SectionId
+  if (parts[1] === 'n' && parts[2]) {
+    try { return { route, path: decodeURIComponent(parts[2]), head: parts[3] ? decodeURIComponent(parts[3]) : undefined } } catch { /* indirizzo rovinato */ }
+  }
+  return { route }
 }
+const hashFor = (route: SectionId, path?: string, head?: string) => '#/' + route + (path ? '/n/' + encodeURIComponent(path) + (head ? '/' + encodeURIComponent(head) : '') : '')
+const routeFromHash = (): SectionId => parseHash().route
+/** Profondità della voce corrente nella cronologia dell'app (salvata nella voce stessa, sopravvive al ricaricamento). */
+let depth = typeof history !== 'undefined' ? (history.state?.d ?? 0) : 0
+const trail: string[] = typeof location !== 'undefined' ? [location.hash || '#/home'] : []
 
 export const useStore = create<State>((set, get) => {
   async function load() {
@@ -164,20 +181,25 @@ export const useStore = create<State>((set, get) => {
       }
     },
     go(r) {
-      if (location.hash !== '#/' + r) location.hash = '#/' + r
       set({ route: r, reader: null, stack: [] })
+      const h = hashFor(r)
+      if (location.hash !== h) location.hash = h
     },
     open(path, head) {
       const cur = get().reader
       set({ reader: { path, editing: false, head }, stack: cur && cur.path !== path ? [...get().stack, cur.path] : get().stack })
+      const h = hashFor(get().route, path, head)
+      if (location.hash !== h) location.hash = h
     },
     back() {
-      const st = [...get().stack]
-      const prev = st.pop()
-      set(prev ? { reader: { path: prev, editing: false }, stack: st } : { reader: null, stack: [] })
+      // torna alla schermata precedente vera (stessa cosa del tasto indietro del mouse o di Android)
+      if (depth > 0) { history.back(); return }
+      const r = get().reader
+      if (r) { set({ reader: null, stack: [] }); history.replaceState({ d: 0 }, '', hashFor(get().route)); trail[0] = location.hash }
     },
     closeReader() {
       set({ reader: null, stack: [] })
+      history.replaceState({ d: depth }, '', hashFor(get().route))
     },
     setEditing(on) {
       const r = get().reader
@@ -376,11 +398,25 @@ export const useStore = create<State>((set, get) => {
   }
 })
 
-if (typeof window !== 'undefined')
-  window.addEventListener('hashchange', () => {
-    const r = routeFromHash()
-    if (useStore.getState().route !== r) useStore.setState({ route: r, reader: null, stack: [] })
-  })
+/** Applica l'indirizzo corrente allo stato (anche quando si torna indietro o avanti nella cronologia). */
+function applyHash() {
+  const h = location.hash || '#/home'
+  if (typeof history.state?.d === 'number') depth = history.state.d
+  else { depth += 1; history.replaceState({ d: depth }, '') }
+  if (trail.length > 1 && trail[trail.length - 2] === h) trail.pop()
+  else if (trail[trail.length - 1] !== h) trail.push(h)
+  const { route, path, head } = parseHash(h)
+  const st = useStore.getState()
+  const stack = trail.slice(0, -1).map((x) => parseHash(x).path).filter((x): x is string => !!x)
+  if (path) {
+    if (st.route !== route || st.reader?.path !== path || st.reader?.head !== head) useStore.setState({ route, reader: { path, editing: false, head }, stack })
+  } else if (st.route !== route || st.reader) useStore.setState({ route, reader: null, stack: [] })
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('hashchange', applyHash)
+  // all'avvio: se l'indirizzo punta a una nota, la riapro
+  queueMicrotask(() => { const { path } = parseHash(); if (path) applyHash() })
+}
 
 // ───────────── selettori ─────────────
 export const inDir = (notes: Note[], dir: string) => notes.filter((n) => n.path.startsWith(dir + '/'))
