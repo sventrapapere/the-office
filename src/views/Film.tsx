@@ -4,7 +4,7 @@ import { useStore, inDir } from '../store'
 import { section } from '../sections'
 import { Card, Chip, PageHead, Seg, Button, IconButton, Empty, Stat, inputCls } from '../ui/kit'
 import { Stars, Tag } from '../ui/notes'
-import { Modal } from '../ui/Sheet'
+import { Modal, Sheet } from '../ui/Sheet'
 import { useBackClose } from '../lib/backstack'
 import { Icon, type IconName } from '../ui/Icon'
 import { useAssetUrl } from '../lib/assets'
@@ -260,6 +260,20 @@ function ExpandGrid({ items, open, onOpen, minCol, cols: fixedCols, gap, render,
 
 
 
+/** Telefono: scorrendo a destra/sinistra sulla scheda passo al titolo vicino. */
+function useSwipe(go: (d: number) => void) {
+  const start = useRef<[number, number] | null>(null)
+  return {
+    onTouchStart: (e: React.TouchEvent) => { const t = e.touches[0]; start.current = [t.clientX, t.clientY] },
+    onTouchEnd: (e: React.TouchEvent) => {
+      const s0 = start.current; start.current = null
+      if (!s0) return
+      const t = e.changedTouches[0], dx = t.clientX - s0[0], dy = t.clientY - s0[1]
+      if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.6) go(dx < 0 ? 1 : -1)
+    },
+  }
+}
+
 /** Nuovo titolo: crea la nota con lo stesso formato delle altre schede. */
 function AddTitle({ open, onClose, cats }: { open: boolean; onClose: () => void; cats: string[] }) {
   const st = useStore.getState()
@@ -358,7 +372,8 @@ export default function Film({ phone }: { phone?: boolean }) {
   // anteprima delle varianti della scheda (A riga, B finestra, C passaggio del mouse, D pagina)
   // scheda: si apre nella riga della locandina (A); sul PC, fermandosi su una locandina, schedina rapida (C)
   const [from, setFrom] = useState<'picks' | 'grid'>('grid')
-  useBackClose(!!cur, close, cur?.path)
+  useBackClose(!!cur && !phone, close, cur?.path)
+  const swipe = useSwipe(go)
   useEffect(() => {
     if (!cur) return
     const k = (e: KeyboardEvent) => {
@@ -372,7 +387,7 @@ export default function Film({ phone }: { phone?: boolean }) {
   }, [cur, close, go])
   const rowDetail = (n: Note) => <Detail note={n} all={all} onPick={setOpenP} phone={phone} layout={phone ? 'stack' : 'row'} />
   const grid = shown.length ? (
-    <div key={show + cat + sort} className="fade-in"><ExpandGrid items={shown} open={from === 'grid' ? openP : null} onOpen={(p) => { setFrom('grid'); setOpenP(p) }} minCol={150} gap={14} cols={phone ? 3 : undefined} render={rowDetail} phone={phone} /></div>
+    <div key={show + cat + sort} className="fade-in"><ExpandGrid items={shown} open={from === 'grid' && !phone ? openP : null} onOpen={(p) => { setFrom('grid'); setOpenP(p) }} minCol={150} gap={14} cols={phone ? 3 : undefined} render={rowDetail} phone={phone} /></div>
   ) : <Empty icon="film">Nessun titolo con questi filtri.</Empty>
   const hero = picks[0]
 
@@ -397,6 +412,11 @@ export default function Film({ phone }: { phone?: boolean }) {
       )}
       {filters}
       {grid}
+      {phone && (
+        <Sheet open={!!cur} onOpenChange={(o) => !o && setOpenP(null)} title={cur?.title || 'Scheda'} hideTitle>
+          {cur && <div key={cur.path} className="fade-in" {...swipe}><Detail note={cur} all={all} onPick={setOpenP} phone /></div>}
+        </Sheet>
+      )}
       <AddTitle open={adding} onClose={() => setAdding(false)} cats={cats} />
     </div>
   )
