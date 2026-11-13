@@ -240,7 +240,7 @@ export default function Film({ phone }: { phone?: boolean }) {
     </div>
   )
   const grid = shown.length ? (
-    <div className="grid gap-x-3.5 gap-y-5" style={{ gridTemplateColumns: phone ? 'repeat(3, minmax(0, 1fr))' : 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+    <div key={show + cat + sort} className="fade-in grid gap-x-3.5 gap-y-5" style={{ gridTemplateColumns: phone ? 'repeat(3, minmax(0, 1fr))' : 'repeat(auto-fill, minmax(150px, 1fr))' }}>
       {shown.map((n) => <Poster key={n.path} note={n} onClick={() => setOpenP(n.path)} selected={openP === n.path} />)}
     </div>
   ) : <Empty icon="film">Nessun titolo con questi filtri.</Empty>

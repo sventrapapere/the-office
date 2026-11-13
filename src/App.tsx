@@ -1,6 +1,6 @@
 import { useEffect, useState, lazy, Suspense } from 'react'
 import { Toaster } from 'sonner'
-import { useStore, type SectionId } from './store'
+import { navDir, useStore, type SectionId } from './store'
 import { SECTIONS, orderedSections } from './sections'
 import { Dock, TopBar } from './ui/Shell'
 import { PhoneShell } from './ui/PhoneShell'
@@ -120,7 +120,9 @@ export default function App() {
 
   const body = !loaded ? <Loading /> : error && !useStore.getState().notes.length ? <Problem msg={error} /> : (
     <Suspense fallback={<Loading />}>
-      {reader ? <Reader phone={!wide} /> : <View route={route} phone={!wide} />}
+      <div key={reader ? 'n:' + reader.path : 'r:' + route} className={navDir() === 'pop' ? (wide ? 'fade-in' : 'back-in') : reader && !wide ? 'push-in' : 'page-in'}>
+        {reader ? <Reader phone={!wide} /> : <View route={route} phone={!wide} />}
+      </div>
     </Suspense>
   )
 

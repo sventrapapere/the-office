@@ -47,7 +47,7 @@ function Reading({ n, phone }: { n: Note; phone?: boolean }) {
   const st = useStore.getState()
   const tot = num(n.fm.pagine), p = num(n.fm.pagina) ?? 0
   const pct = tot ? Math.min(100, Math.round((p / tot) * 100)) : 0
-  const bar = <div className="h-1.5 rounded-full bg-s3 overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><div className="h-full bg-ac rounded-full" style={{ width: pct + '%' }} /></div>
+  const bar = <div className="h-1.5 rounded-full bg-s3 overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><div className="bar-fill h-full bg-ac rounded-full" style={{ width: pct + '%' }} /></div>
   if (phone)
     return (
       <PageUpdate n={n}>
@@ -180,7 +180,7 @@ export default function Libri({ phone }: { phone?: boolean }) {
       </div>
       {!list.length && <Empty icon="libri">{show === 'read' ? 'Nessun libro letto ancora. Apri un libro e segna “Letto”.' : 'Niente qui.'}</Empty>}
       {phone ? (
-        <div className="flex flex-col">
+        <div key={show} className="fade-in flex flex-col">
           {list.map((n) => (
             <div key={n.path} className="flex items-center gap-3 min-h-[68px] border-b border-ln last:border-b-0">
               <button type="button" onClick={() => setSel(n.path)} className="flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer py-2">
@@ -196,7 +196,7 @@ export default function Libri({ phone }: { phone?: boolean }) {
           ))}
         </div>
       ) : (
-        <div className="grid gap-x-4 gap-y-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
+        <div key={show} className="fade-in grid gap-x-4 gap-y-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
           {list.map((n) => (
             <button key={n.path} type="button" onClick={() => setSel(n.path)} className="group flex flex-col gap-1.5 text-left cursor-pointer min-w-0">
               <Cover className="aspect-[2/3] w-full transition-transform duration-150 ease-out group-hover:-translate-y-0.5" />

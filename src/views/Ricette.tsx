@@ -137,7 +137,7 @@ export default function Ricette({ phone }: { phone?: boolean }) {
       )}
       {!list.length && <Empty icon="ricette">Nessuna ricetta con questi filtri.</Empty>}
       {phone ? (
-        <div className="flex flex-col gap-2">
+        <div key={cat + String(onlyTested) + String(quick)} className="fade-in flex flex-col gap-2">
           {list.map((n) => (
             <button key={n.path} type="button" onClick={() => st.open(n.path)} className="press flex items-center gap-3.5 p-2.5 rounded-xl bg-s1 border border-ln text-left cursor-pointer">
               <span className="w-14 h-14 rounded-lg bg-s3 flex items-center justify-center flex-none"><Icon name="ricette" size={20} /></span>
@@ -150,7 +150,7 @@ export default function Ricette({ phone }: { phone?: boolean }) {
           ))}
         </div>
       ) : (
-        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))' }}>
+        <div key={cat + String(onlyTested) + String(quick)} className="fade-in grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))' }}>
           {list.map((n) => <RecipeCard key={n.path} n={n} />)}
         </div>
       )}

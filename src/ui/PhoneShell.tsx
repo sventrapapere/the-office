@@ -7,6 +7,7 @@ import { Icon, type IconName } from './Icon'
 import { Dot, IconButton } from './kit'
 import { useCounts, SyncStatus } from './Shell'
 import { Capture } from '../views/Home'
+import { useBackClose } from '../lib/backstack'
 
 /** Scheda della barra in basso: niente pillola, puntino sopra l'icona della scheda attiva (come nella tavola). */
 function Tab({ id, label, icon, active, onClick }: { id: string; label: string; icon: IconName; active: boolean; onClick: () => void }) {
@@ -18,7 +19,7 @@ function Tab({ id, label, icon, active, onClick }: { id: string; label: string; 
       aria-current={active ? 'page' : undefined}
       className={clsx('press relative flex-1 min-w-0 flex flex-col items-center justify-center gap-1 h-[62px] cursor-pointer', active ? 'text-tx' : 'text-mu')}
     >
-      {active && <span aria-hidden="true" className="absolute top-1.5 w-1 h-1 rounded-full bg-tx" />}
+      {active && <span aria-hidden="true" className="dot-in absolute top-1.5 w-1 h-1 rounded-full bg-tx" />}
       <Icon name={icon} size={21} stroke={active ? 2.1 : 1.8} />
       <span className={clsx('text-[11px] truncate max-w-full', active && 'font-semibold')}>{label}</span>
     </button>
@@ -40,6 +41,7 @@ function SideMenu({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boo
       {hint && <span className="text-[12px] text-mu">{hint}</span>}
     </button>
   )
+  useBackClose(open, () => onOpenChange(false))
   return (
     <Drawer.Root open={open} onOpenChange={(o) => onOpenChange(o)} swipeDirection="left">
       <Drawer.Portal>

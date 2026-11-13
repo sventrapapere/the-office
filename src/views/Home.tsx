@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, useEffect } from 'react'
 import clsx from 'clsx'
 import NumberFlow from '@number-flow/react'
 import { useStore, daily, todos, spesa } from '../store'
-import { Card, Check, Chip, IconButton, Badge, Empty, Kbd, Dot, relTime, Button, Pop, inputCls, type MenuEntry } from '../ui/kit'
+import { Card, Check, useListAnim, Chip, IconButton, Badge, Empty, Kbd, Dot, relTime, Button, Pop, inputCls, type MenuEntry } from '../ui/kit'
 import { Icon } from '../ui/Icon'
 import { Modal, Sheet } from '../ui/Sheet'
 import {
@@ -157,7 +157,7 @@ function Habits({ phone }: { phone?: boolean }) {
               aria-pressed={d}
               onClick={() => toggleHabit(it.title)}
               title={it.note.length ? it.note.join('\n') : undefined}
-              className="press flex items-center gap-3 min-h-[44px] px-3 rounded-lg border border-ln bg-s2 text-left cursor-pointer hov"
+              className="press flex items-center gap-3 min-h-[44px] px-3 rounded-lg border border-ln bg-s2 text-left cursor-pointer hov [&>span]:transition-colors [&>span]:duration-150"
             >
               <Check done={d} />
               <span className={clsx('flex-1 min-w-0 leading-tight', d && 'text-mu')}>{it.title}</span>
@@ -183,7 +183,7 @@ function DayDetail({ k, onClose }: { k: string; onClose: () => void }) {
   const d = fromKey(k)
   const hs = habitsOn(log, daily(check), d)
   return (
-    <div className="rounded-lg border border-ol bg-s2 p-3 flex flex-col gap-1.5">
+    <div className="pop-in rounded-lg border border-ol bg-s2 p-3 flex flex-col gap-1.5">
       <div className="flex items-center">
         <span className="font-semibold flex-1">{DOW_L[d.getDay()].replace(/^./, (c) => c.toUpperCase())} {d.getDate()} {MONTHS[d.getMonth()]}</span>
         <IconButton icon="close" label="Chiudi il giorno" size={28} onClick={onClose} />
@@ -282,7 +282,7 @@ function Costanza({ phone }: { phone?: boolean }) {
         </div>
       </div>
       {phone && full && <div className="self-start">{monthPicker}</div>}
-      <div className="grid grid-cols-7 gap-1.5" role="grid" aria-label="Calendario della costanza">
+      <div key={full ? month : "settimana"} className="fade-in grid grid-cols-7 gap-1.5" role="grid" aria-label="Calendario della costanza">
         {['L', 'M', 'M', 'G', 'V', 'S', 'D'].map((w, i) => <span key={i} className="text-[11px] text-mu text-center leading-none pb-1">{w}</span>)}
         {Array.from({ length: lead }, (_, i) => <span key={'e' + i} />)}
         {cells.map(({ d, k, r, future }) => {
@@ -297,7 +297,7 @@ function Costanza({ phone }: { phone?: boolean }) {
               aria-label={lbl}
               aria-pressed={sel === k}
               onClick={() => setSel(sel === k ? null : k)}
-              className="press rounded-md cursor-pointer disabled:cursor-default flex items-center justify-center"
+              className="press cell-fill rounded-md cursor-pointer disabled:cursor-default flex items-center justify-center"
               style={{
                 height: phone ? 40 : 30,
                 background: r == null ? 'transparent' : heat(r),
@@ -309,9 +309,15 @@ function Costanza({ phone }: { phone?: boolean }) {
           )
         })}
       </div>
-      {sel && <DayDetail k={sel} onClose={() => setSel(null)} />}
+      {sel && <DayDetail key={sel} k={sel} onClose={() => setSel(null)} />}
     </Card>
   )
+}
+
+/** Chiave stabile per le righe (il titolo, con un contatore se si ripete), così le animazioni seguono la riga giusta. */
+function keyed<T extends { it: Item }>(xs: T[]): (T & { key: string })[] {
+  const seen = new Map<string, number>()
+  return xs.map((x) => { const n = seen.get(x.it.title) || 0; seen.set(x.it.title, n + 1); return { ...x, key: x.it.title + (n ? '#' + n : '') } })
 }
 
 // ───────────────────────── da fare ─────────────────────────
@@ -322,7 +328,7 @@ function TodoEditor({ it, onSave, onCancel, onDelete }: { it?: Item; onSave: (v:
   const save = () => title.trim() && onSave({ title: title.trim(), due: due || undefined, note: note.replace(/\s+$/, '') ? note.replace(/\s+$/, '').split('\n') : [] })
   const quick = (n: number) => setDue(ymd(addDays(new Date(), n)))
   return (
-    <div className="flex flex-col gap-2 p-3 my-1.5 rounded-lg border border-ol bg-s2" onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') { e.preventDefault(); save() } }}>
+    <div className="pop-in flex flex-col gap-2 p-3 my-1.5 rounded-lg border border-ol bg-s2" onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') { e.preventDefault(); save() } }}>
       <input autoFocus className={inputCls + ' bg-s1'} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Cosa devi fare?" aria-label="Cosa devi fare" />
       <div className="flex flex-wrap items-center gap-1.5">
         <Icon name="cal" size={15} className="text-mu" />
@@ -357,12 +363,13 @@ function Todos({ phone }: { phone?: boolean }) {
     ...(closed.length ? [{ label: 'Togli le fatte dalla lista', icon: 'trash' as const, onClick: () => st.mutateCheck((d) => { const s = d.find((b) => b.type === 'sec' && b.kind === 'todo'); if (s && s.type === 'sec') s.items = s.items.filter((x) => !x.done) }, 'Fatte tolte') }] : []),
     { label: 'Apri la nota Checklist', icon: 'note', onClick: () => st.open(CHECK_PATH) },
   ]
-  const row = ({ it, i }: { it: Item; i: number }) =>
+  const list = useListAnim()
+  const row = ({ it, i, key }: { it: Item; i: number; key: string }) =>
     editing === i ? (
-      <TodoEditor key={i} it={it} onCancel={() => setEditing(null)} onSave={(v) => { st.updateItem('todo', i, { title: v.title, due: v.due, note: v.note }); setEditing(null) }}
+      <TodoEditor key={key} it={it} onCancel={() => setEditing(null)} onSave={(v) => { st.updateItem('todo', i, { title: v.title, due: v.due, note: v.note }); setEditing(null) }}
         onDelete={() => { st.removeItem('todo', i); setEditing(null) }} />
     ) : (
-      <div key={i + it.title} className="flex items-center gap-3 min-h-[50px] px-1 border-b border-ln last:border-b-0">
+      <div key={key} className="flex items-center gap-3 min-h-[50px] px-1 border-b border-ln last:border-b-0">
         <button type="button" aria-label={(it.done ? 'Riapri: ' : 'Completa: ') + it.title} onClick={() => st.toggleItem('todo', i)} className="press cursor-pointer p-1 -m-1">
           <Check done={it.done} round size={20} />
         </button>
@@ -380,9 +387,11 @@ function Todos({ phone }: { phone?: boolean }) {
   return (
     <Card title="Da fare" plain={phone} right={<button type="button" className="text-[12px] text-mu px-2 h-7 rounded-md hov cursor-pointer" onClick={() => setShowDone((v) => !v)}>{showDone ? 'Aperte' : 'Tutte'}{phone ? ' · ' + open.length : ''}</button>} menu={menu} flush>
       {open.length === 0 && editing !== 'new' && <Empty>Niente in sospeso.</Empty>}
-      {open.map(row)}
-      {showDone && closed.length > 0 && <div className="pt-2 pb-1 px-1"><span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-mu">Fatte · {closed.length}</span></div>}
-      {showDone && closed.map(row)}
+      <div ref={list} className="flex flex-col">
+        {keyed(open).map(row)}
+        {showDone && closed.length > 0 && <div key="~fatte" className="pt-2 pb-1 px-1"><span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-mu">Fatte · {closed.length}</span></div>}
+        {showDone && keyed(closed).map(row)}
+      </div>
       {editing === 'new' ? (
         <TodoEditor onCancel={() => setEditing(null)} onSave={(v) => { st.addItem('todo', v.title, { due: v.due, note: v.note }); setEditing(null) }} />
       ) : (
@@ -401,6 +410,7 @@ function Spesa({ phone }: { phone?: boolean }) {
   const [open, setOpen] = useState(!phone)
   const ref = useRef<HTMLInputElement>(null)
   useEffect(() => { if (adding) ref.current?.focus() }, [adding])
+  const chips = useListAnim()
   const all = spesa(check).map((it, i) => ({ it, i }))
   const left = all.filter((x) => !x.it.done)
   const got = all.filter((x) => x.it.done)
@@ -419,9 +429,9 @@ function Spesa({ phone }: { phone?: boolean }) {
     )
   return (
     <Card title="Lista della spesa" plain={phone} right={<><Badge>{left.length}</Badge>{phone && <IconButton icon="chevd" label="Chiudi" size={28} onClick={() => setOpen(false)} />}</>} menu={menu}>
-      <div className="flex flex-wrap gap-2">
-        {[...left, ...got].map(({ it, i }) => (
-          <span key={i + it.title} className={clsx('group inline-flex items-center rounded-lg border min-h-[40px]', it.done ? 'border-ln bg-transparent' : 'border-ol bg-s1')}>
+      <div ref={chips} className="flex flex-wrap gap-2">
+        {keyed([...left, ...got]).map(({ it, i, key }) => (
+          <span key={key} className={clsx('group inline-flex transition-colors duration-150 items-center rounded-lg border min-h-[40px]', it.done ? 'border-ln bg-transparent' : 'border-ol bg-s1')}>
             <button type="button" onClick={() => st.toggleItem('spesa', i)} aria-pressed={it.done} title={it.note.join(' ') || undefined}
               className="press inline-flex items-center gap-2.5 pl-3 pr-2 h-10 cursor-pointer">
               <Check done={it.done} size={17} />

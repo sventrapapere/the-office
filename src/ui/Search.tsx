@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect, Fragment } from 'react'
+import { useBackClose } from '../lib/backstack'
 import { Command } from 'cmdk'
 import { Dialog } from '@base-ui/react/dialog'
 import { useStore, type SectionId } from '../store'
@@ -167,6 +168,7 @@ export function SearchDialog() {
   const [wide, setWide] = useState(() => matchMedia('(min-width: 900px)').matches)
   useEffect(() => { if (open) setWide(matchMedia('(min-width: 900px)').matches) }, [open])
   const close = (o: boolean) => set('searchOpen', o)
+  useBackClose(open, () => close(false))
   return (
     <Dialog.Root open={open} onOpenChange={(o) => close(o)}>
       <Dialog.Portal>

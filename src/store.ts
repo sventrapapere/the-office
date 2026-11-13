@@ -1,3 +1,4 @@
+import { afterOverlays, onOverlayEntry } from './lib/backstack'
 import { create } from 'zustand'
 import { toast } from 'sonner'
 import type { Vault, SyncState } from './vault/types'
@@ -118,6 +119,17 @@ function parseHash(h = location.hash): { route: SectionId; path?: string; head?:
 const hashFor = (route: SectionId, path?: string, head?: string) => '#/' + route + (path ? '/n/' + encodeURIComponent(path) + (head ? '/' + encodeURIComponent(head) : '') : '')
 const routeFromHash = (): SectionId => parseHash().route
 /** Profondità della voce corrente nella cronologia dell'app (salvata nella voce stessa, sopravvive al ricaricamento). */
+/** Nuova voce nella cronologia; se sono sulla voce di una finestra aperta, la sostituisco (la finestra si chiude). */
+function setHash(h: string) {
+  afterOverlays(() => {
+    if (location.hash === h) return
+    if (onOverlayEntry()) location.replace(h)
+    else location.hash = h
+  })
+}
+/** Direzione dell'ultimo cambio di schermata (per l'animazione: avanti entra da destra, indietro da sinistra). */
+let dir: 'push' | 'pop' = 'push'
+export const navDir = () => dir
 let depth = typeof history !== 'undefined' ? (history.state?.d ?? 0) : 0
 const trail: string[] = typeof location !== 'undefined' ? [location.hash || '#/home'] : []
 
@@ -181,15 +193,15 @@ export const useStore = create<State>((set, get) => {
       }
     },
     go(r) {
+      dir = 'push'
       set({ route: r, reader: null, stack: [] })
-      const h = hashFor(r)
-      if (location.hash !== h) location.hash = h
+      setHash(hashFor(r))
     },
     open(path, head) {
+      dir = 'push'
       const cur = get().reader
       set({ reader: { path, editing: false, head }, stack: cur && cur.path !== path ? [...get().stack, cur.path] : get().stack })
-      const h = hashFor(get().route, path, head)
-      if (location.hash !== h) location.hash = h
+      setHash(hashFor(get().route, path, head))
     },
     back() {
       // torna alla schermata precedente vera (stessa cosa del tasto indietro del mouse o di Android)
@@ -401,8 +413,8 @@ export const useStore = create<State>((set, get) => {
 /** Applica l'indirizzo corrente allo stato (anche quando si torna indietro o avanti nella cronologia). */
 function applyHash() {
   const h = location.hash || '#/home'
-  if (typeof history.state?.d === 'number') depth = history.state.d
-  else { depth += 1; history.replaceState({ d: depth }, '') }
+  if (typeof history.state?.d === 'number') { dir = history.state.d < depth ? 'pop' : 'push'; depth = history.state.d }
+  else { dir = 'push'; depth += 1; history.replaceState({ d: depth }, '') }
   if (trail.length > 1 && trail[trail.length - 2] === h) trail.pop()
   else if (trail[trail.length - 1] !== h) trail.push(h)
   const { route, path, head } = parseHash(h)

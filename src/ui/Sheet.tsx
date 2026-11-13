@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react'
 import { Drawer } from '@base-ui/react/drawer'
 import { Dialog } from '@base-ui/react/dialog'
+import { useBackClose } from '../lib/backstack'
 
 /** Foglio dal basso (telefono): si chiude trascinando giù, con Esc o toccando fuori. */
 export function Sheet({ open, onOpenChange, title, children, hideTitle }: { open: boolean; onOpenChange: (o: boolean) => void; title: string; children: ReactNode; hideTitle?: boolean }) {
+  useBackClose(open, () => onOpenChange(false))
   return (
     <Drawer.Root open={open} onOpenChange={(o) => onOpenChange(o)} swipeDirection="down">
       <Drawer.Portal>
@@ -22,6 +24,7 @@ export function Sheet({ open, onOpenChange, title, children, hideTitle }: { open
 
 /** Finestra centrata (PC). */
 export function Modal({ open, onOpenChange, title, children, hideTitle, className }: { open: boolean; onOpenChange: (o: boolean) => void; title: string; children: ReactNode; hideTitle?: boolean; className?: string }) {
+  useBackClose(open, () => onOpenChange(false))
   return (
     <Dialog.Root open={open} onOpenChange={(o) => onOpenChange(o)}>
       <Dialog.Portal>

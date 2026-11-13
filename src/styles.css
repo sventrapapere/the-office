@@ -157,3 +157,27 @@ mark.hit { background: var(--s3); color: var(--tx); border-radius: 3px; padding:
 /* ───── editor markdown ───── */
 .editor-layer { font-family: var(--font-mono); font-size: 13.5px; line-height: 22px; padding: 14px 16px; white-space: pre; tab-size: 4; letter-spacing: 0; }
 .hl-fm { color: var(--mu); } .hl-h { color: var(--ac); font-weight: 700; } .hl-l { color: var(--ac); } .hl-q { color: var(--mu); } .hl-t { color: var(--mu); } .hl-b { font-weight: 700; }
+
+/* ───── movimento (Grafite: ease-out, < 300 ms, solo transform/opacity) ───── */
+/* cambio di schermata: la nuova sale di poco e appare */
+@keyframes page-in { from { opacity: 0; transform: translateY(6px); } }
+@keyframes push-in { from { opacity: 0; transform: translateX(14px); } }
+@keyframes back-in { from { opacity: 0; transform: translateX(-14px); } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes pop-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
+.page-in { animation: page-in 200ms var(--ease-out); }
+.push-in { animation: push-in 220ms var(--ease-out); }
+.back-in { animation: back-in 220ms var(--ease-out); }
+.fade-in { animation: fade-in 160ms var(--ease-out); }
+.pop-in { animation: pop-in 180ms var(--ease-out); transform-origin: top center; }
+/* spunta: la casella si gonfia appena e il segno si disegna */
+@keyframes check-pop { 0% { transform: scale(.8); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
+@keyframes check-draw { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
+.check-anim { animation: check-pop 220ms var(--ease-out); }
+.check-anim path, .check-anim polyline { stroke-dasharray: 24; animation: check-draw 220ms var(--ease-out) 40ms both; }
+/* puntino della scheda attiva sul telefono */
+@keyframes dot-in { from { transform: scale(0); opacity: 0; } }
+.dot-in { animation: dot-in 200ms var(--ease-out); }
+/* celle del calendario e barre che cambiano valore */
+.cell-fill { transition: background-color 220ms var(--ease-out), box-shadow 150ms var(--ease-out), transform 120ms var(--ease-out); }
+.bar-fill { transition: width 300ms var(--ease-out); }

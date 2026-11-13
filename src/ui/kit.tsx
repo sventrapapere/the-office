@@ -1,8 +1,18 @@
 import clsx from 'clsx'
-import type { ReactNode, ButtonHTMLAttributes, ReactElement } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useBackClose } from '../lib/backstack'
+import type { CSSProperties, ReactNode, ButtonHTMLAttributes, ReactElement } from 'react'
 import { Menu } from '@base-ui/react/menu'
 import { Popover } from '@base-ui/react/popover'
 import { Icon, type IconName } from './Icon'
+import NumberFlow from '@number-flow/react'
+import { useAutoAnimate } from '@formkit/auto-animate/react'
+
+/** Elenco che anima aggiunte, rimozioni e riordini (auto-animate, rispetta "riduci movimento"). */
+export function useListAnim<T extends HTMLElement = HTMLDivElement>() {
+  const [ref] = useAutoAnimate<T>({ duration: 180, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' })
+  return ref
+}
 
 export const Kbd = ({ children }: { children: ReactNode }) => (
   <kbd className="num text-[11px] px-1.5 py-px rounded-[5px] border border-ln text-mu leading-none whitespace-nowrap">{children}</kbd>
@@ -16,8 +26,10 @@ export interface MenuEntry { label: string; icon?: IconName; onClick: () => void
 
 /** Pulsante ⋯ con menu (Base UI Menu). */
 export function MoreMenu({ items, label = 'Altre azioni', size = 30, trigger }: { items: MenuEntry[]; label?: string; size?: number; trigger?: ReactElement }) {
+  const [open, setOpen] = useState(false)
+  useBackClose(open, () => setOpen(false))
   return (
-    <Menu.Root>
+    <Menu.Root open={open} onOpenChange={setOpen}>
       <Menu.Trigger
         aria-label={label}
         title={label}
@@ -49,8 +61,12 @@ export function MoreMenu({ items, label = 'Altre azioni', size = 30, trigger }: 
 
 /** Piccolo pannello che si apre da un pulsante (Base UI Popover). */
 export function Pop({ trigger, children, open, onOpenChange, align = 'end', title }: { trigger: ReactElement; children: ReactNode; open?: boolean; onOpenChange?: (o: boolean) => void; align?: 'start' | 'center' | 'end'; title?: string }) {
+  const [own, setOwn] = useState(false)
+  const isOpen = open ?? own
+  const change = (o: boolean) => { if (open == null) setOwn(o); onOpenChange?.(o) }
+  useBackClose(isOpen, () => change(false))
   return (
-    <Popover.Root open={open} onOpenChange={onOpenChange}>
+    <Popover.Root open={isOpen} onOpenChange={change}>
       <Popover.Trigger render={trigger} />
       <Popover.Portal>
         <Popover.Positioner sideOffset={6} align={align} className="z-[60] outline-none">
@@ -79,9 +95,14 @@ export function Card({ title, right, children, className, flush, id, menu, bodyC
 
 /** Casella: "white" per le abitudini (come nella tavola), "accent" per le caselle dentro le note. */
 export function Check({ done, round, size = 18, tone = 'white' }: { done: boolean; round?: boolean; size?: number; tone?: 'white' | 'accent' }) {
+  // anima solo quando la casella viene spuntata davanti a te, non quando la pagina si apre
+  const prev = useRef(done)
+  const anim = done && !prev.current
+  useEffect(() => { prev.current = done }, [done])
   return done ? (
     <span
-      className={clsx('inline-flex align-middle flex-none items-center justify-center', tone === 'accent' ? 'bg-ac text-[#1A0A02]' : 'bg-tx text-bg', round ? 'rounded-full' : 'rounded-[5px]')}
+      key={anim ? 'a' : 's'}
+      className={clsx(anim && 'check-anim', 'inline-flex align-middle flex-none items-center justify-center', tone === 'accent' ? 'bg-ac text-[#1A0A02]' : 'bg-tx text-bg', round ? 'rounded-full' : 'rounded-[5px]')}
       style={{ width: size, height: size }}
     >
       <Icon name="check" size={size - 6} stroke={3} />
@@ -201,7 +222,7 @@ export function PageHead({ dot, title, sub, children }: { dot: string; title: st
 export function Stat({ value, label, tone = 'accent' }: { value: ReactNode; label: string; tone?: 'accent' | 'ok' | 'plain' }) {
   return (
     <div className="rounded-xl bg-s1 border border-ln px-4 py-3 min-w-0">
-      <div className={clsx('num text-[28px] font-semibold leading-tight', tone === 'accent' ? 'text-ac' : tone === 'ok' ? 'text-ok' : 'text-tx')}>{value}</div>
+      <div className={clsx('num text-[28px] font-semibold leading-tight', tone === 'accent' ? 'text-ac' : tone === 'ok' ? 'text-ok' : 'text-tx')}>{typeof value === 'number' ? <NumberFlow value={value} locales="it-IT" className="block" style={{ lineHeight: 1.25, '--number-flow-char-height': '1.25em', '--number-flow-mask-height': '0.1em', margin: '-0.1em 0' } as CSSProperties} /> : value}</div>
       <div className="text-[13px] text-mu truncate">{label}</div>
     </div>
   )

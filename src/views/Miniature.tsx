@@ -3,7 +3,7 @@ import clsx from 'clsx'
 import { toast } from 'sonner'
 import { useStore, daily } from '../store'
 import { section } from '../sections'
-import { PageHead, Card, Badge, Empty, Button, Chip, Seg, MoreMenu, inputCls } from '../ui/kit'
+import { PageHead, Card, useListAnim, Badge, Empty, Button, Chip, Seg, MoreMenu, inputCls } from '../ui/kit'
 import { Modal, Sheet } from '../ui/Sheet'
 import { Icon } from '../ui/Icon'
 import { mdSection, mdTable, setFM, fmStr, type Note } from '../lib/md'
@@ -106,7 +106,7 @@ function Table({ table, ric, groups, phone }: { table: Note | undefined; ric: No
         <div className="text-[13px] text-mu">Ricetta: {recipeName[1] || recipeName[0] || '—'}{steps.length ? ` · passaggio ${Math.min(step, steps.length)} di ${steps.length}` : ''} · {done} finit{done === 1 ? 'o' : 'i'}, {painting} in pittura</div>
       </div>
       <div className="flex h-2.5 rounded-full overflow-hidden gap-[3px] bg-s2" aria-label="Avanzamento del lotto">
-        {STAGES.map((s, i) => counts[i] > 0 && <span key={s.k} style={{ flex: counts[i], background: s.c }} title={`${s.l}: ${counts[i]}`} />)}
+        {STAGES.map((s, i) => counts[i] > 0 && <span key={s.k} className="transition-[flex-grow] duration-300 ease-out" style={{ flex: counts[i], background: s.c }} title={`${s.l}: ${counts[i]}`} />)}
       </div>
       <div className="flex flex-wrap gap-x-1 gap-y-1">
         {STAGES.map((s, i) => (
@@ -150,6 +150,7 @@ function Wishlist({ wish, phone }: { wish?: Note; phone?: boolean }) {
   const vinted = daily(check).find((h) => /vinted/i.test(h.title))
   const vintedTodo = vinted && !isDone(log, todayKey(), vinted.title)
   const items = listItems(wish)
+  const wl = useListAnim()
   const rule = wish?.body.match(/^>\s*(.+)$/m)?.[1]
   const add = async () => {
     const t = text.trim()
@@ -162,10 +163,10 @@ function Wishlist({ wish, phone }: { wish?: Note; phone?: boolean }) {
     <Card title="Lista desideri" plain={phone} right={vinted ? <span className={clsx('text-[12px] font-semibold px-2 h-6 rounded-md inline-flex items-center', vintedTodo ? 'bg-s3 text-tx' : 'text-mu')}>{vintedTodo ? 'Vinted: oggi da controllare' : 'Vinted controllato'}</span> : undefined}
       menu={wish ? [{ label: 'Apri la nota', icon: 'note', onClick: () => st.open(WISH) }] : undefined}>
       <div className="px-3.5 py-3 rounded-lg bg-s2 text-[14px] leading-snug" dangerouslySetInnerHTML={{ __html: rule ? rule.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>') : '<b>La tua regola:</b> compra solo quello che ti piace davvero, senza esagerare con quantità e spesa.' }} />
-      {items.map((it, i) => {
+      <div ref={wl} className="flex flex-col">{items.map((it, i) => {
         const [a, b] = it.split(/\s+—\s+/)
-        return <div key={i} className="flex items-center gap-3 min-h-[52px] border-b border-ln last:border-b-0"><span className="flex-1">{strip(a)}</span>{b && <span className="text-[12px] text-mu">{strip(b)}</span>}</div>
-      })}
+        return <div key={it + '#' + items.slice(0, i).filter((x) => x === it).length} className="flex items-center gap-3 min-h-[52px] border-b border-ln last:border-b-0"><span className="flex-1">{strip(a)}</span>{b && <span className="text-[12px] text-mu">{strip(b)}</span>}</div>
+      })}</div>
       <form onSubmit={(e) => { e.preventDefault(); add() }} className="flex items-center gap-2">
         <Icon name="plus" size={15} className="text-mu" />
         <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Aggiungi (es. Guerrieri nani — da cercare su Vinted)" aria-label="Aggiungi ai desideri" className="flex-1 min-w-0 h-9 bg-transparent outline-none text-[14px] placeholder:text-mu" />
@@ -206,6 +207,7 @@ function GameForm({ open, onClose }: { open: boolean; onClose: () => void }) {
 function Games({ games, onAdd, phone }: { games?: Note; onAdd: () => void; phone?: boolean }) {
   const st = useStore.getState()
   const list = parseGames(games).sort((a, b) => b.date.localeCompare(a.date))
+  const gl = useListAnim()
   return (
     <Card title="Partite" plain={phone} right={list.length ? <Badge>{list.length}</Badge> : undefined} menu={games ? [{ label: 'Registra partita', icon: 'plus', onClick: onAdd }, { label: 'Apri la nota', icon: 'note', onClick: () => st.open(GAMES) }] : undefined}>
       {!list.length ? (
@@ -214,12 +216,12 @@ function Games({ games, onAdd, phone }: { games?: Note; onAdd: () => void; phone
           Dopo la prima partita segna scenario, liste e risultato: qui vedrai lo storico.
         </Empty>
       ) : (
-        list.slice(0, 6).map((g, i) => (
-          <div key={i} className="flex items-center gap-3 min-h-[48px] border-b border-ln last:border-b-0">
+        <div ref={gl} className="flex flex-col">{list.slice(0, 6).map((g) => (
+          <div key={g.date + g.scen + g.vs + g.res} className="flex items-center gap-3 min-h-[48px] border-b border-ln last:border-b-0">
             <span className="flex-1 min-w-0"><span className="block truncate">{g.scen}</span><span className="block text-[12px] text-mu truncate">{g.date.split('-').reverse().join('/')} · contro {g.vs}</span></span>
             <span className={clsx('text-[12px] font-semibold', g.res === 'vinta' ? 'text-ok' : g.res === 'persa' ? 'text-ac' : 'text-mu')}>{g.res}</span>
           </div>
-        ))
+        ))}</div>
       )}
     </Card>
   )
@@ -267,7 +269,7 @@ export default function Miniature({ phone }: { phone?: boolean }) {
             <div className="flex-1 min-w-0 flex flex-col gap-1.5">
               <div className="flex items-baseline gap-2"><span className="font-semibold flex-1 truncate">{c.nome}</span><span className="text-[12px] text-mu whitespace-nowrap">{[c.qta, c.mat, c.fonte].filter(Boolean).join(' · ')}</span></div>
               {counts ? (
-                <div className="flex h-2 rounded-full overflow-hidden gap-[3px]">{STAGES.map((s, i) => counts[i] > 0 && <span key={s.k} style={{ flex: counts[i], background: s.c }} />)}</div>
+                <div className="flex h-2 rounded-full overflow-hidden gap-[3px]">{STAGES.map((s, i) => counts[i] > 0 && <span key={s.k} className="transition-[flex-grow] duration-300 ease-out" style={{ flex: counts[i], background: s.c }} />)}</div>
               ) : <span className="text-[12px] text-mu">{c.side === 'Male' ? 'Esercito del Male' : 'Esercito del Bene'}</span>}
             </div>
           </div>
