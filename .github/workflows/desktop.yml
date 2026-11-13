@@ -1,0 +1,50 @@
+# Compila l'app desktop per Windows (TheOffice.exe) quando cambiano i sorgenti in desktop/.
+# Serve a verificare che il codice Rust compili prima che Marco lanci "Installa The Office.cmd",
+# e mette l'exe nella release "desktop-latest". Registro nel branch "build-logs-desktop".
+name: App desktop Windows
+on:
+  push:
+    branches: [main]
+    paths: ['desktop/**', '.github/workflows/desktop.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Compila
+        id: build
+        continue-on-error: true
+        shell: bash
+        run: cargo build --release --manifest-path desktop/Cargo.toml 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+      - name: Release
+        if: steps.build.outcome == 'success'
+        shell: bash
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          cp desktop/target/release/TheOffice.exe TheOffice.exe
+          gh release delete desktop-latest -y --cleanup-tag 2>/dev/null || true
+          gh release create desktop-latest TheOffice.exe -t "App desktop (ultima)" -n "Commit ${GITHUB_SHA::7}" --prerelease
+      - name: Registro
+        if: always()
+        shell: bash
+        run: |
+          echo "esito: ${{ steps.build.outcome }} · commit ${GITHUB_SHA::7} · $(date -u)" > status.txt
+          mkdir -p ../logs && cp build.log status.txt ../logs/ 2>/dev/null || true
+          git config user.name "build-bot"; git config user.email "build-bot@users.noreply.github.com"
+          git checkout --orphan logs-tmp
+          git rm -rf --cached . >/dev/null
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp ../logs/* .
+          tail -c 900000 build.log > b.tmp && mv b.tmp build.log
+          git add build.log status.txt
+          git commit -m "registro ${GITHUB_SHA::7}"
+          git push -f origin HEAD:build-logs-desktop
+      - name: Esito
+        if: steps.build.outcome != 'success'
+        run: exit 1

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTitleBar } from './TitleBar'
 import clsx from 'clsx'
 import { useStore } from '../store'
 import { Icon } from './Icon'
@@ -99,12 +100,13 @@ export function ClaudePanel() {
     const a = Date.parse(from) - 2000, b = Date.parse(to) + 4000
     return notes.filter((n) => n.mtime >= a && n.mtime <= b && !n.path.startsWith('_dashboard/')).slice(0, 4)
   }
+  const tb = useTitleBar()
   return (
     <aside
       data-open={open}
       aria-label="Chat con Claude"
       aria-hidden={!open}
-      className="side-panel fixed right-3 top-3 bottom-3 z-30 w-[350px] max-w-[calc(100vw-120px)] flex flex-col rounded-2xl bg-s1 border border-ln shadow-[var(--shadow)]"
+      className={"side-panel fixed right-3 bottom-3 " + (tb ? "top-[52px]" : "top-3") + " z-30 w-[350px] max-w-[calc(100vw-120px)] flex flex-col rounded-2xl bg-s1 border border-ln shadow-[var(--shadow)]"}
     >
       <div className="flex items-start gap-3 pt-4 pb-3 pl-4 pr-2">
         <Icon name="claude" size={17} className="mt-1 text-mu" />

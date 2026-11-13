@@ -3,6 +3,7 @@ import { Toaster } from 'sonner'
 import { navDir, restoreScroll, useStore, type SectionId } from './store'
 import { SECTIONS, orderedSections } from './sections'
 import { Dock, TopBar } from './ui/Shell'
+import { TitleBar, useTitleBar } from './ui/TitleBar'
 import { PhoneShell } from './ui/PhoneShell'
 import { SearchDialog } from './ui/Search'
 import { ClaudePanel } from './ui/Claude'
@@ -102,6 +103,7 @@ export default function App() {
   const route = useStore((s) => s.route)
   const reader = useStore((s) => s.reader)
   const sub = useStore((s) => s.sub)
+  const titleBar = useTitleBar()
   useLayoutEffect(() => { restoreScroll() }, [route, sub, reader?.path])
   const loaded = useStore((s) => s.loaded)
   const error = useStore((s) => s.error)
@@ -135,9 +137,10 @@ export default function App() {
       {wide ? (
         <div className="min-h-dvh">
           <Dock />
-          <div className={'pl-[96px] pr-6 transition-[padding] duration-200 ease-out ' + (claudeOpen ? 'xl:pr-[372px]' : '')}>
-            <TopBar />
-            <main id="main" className="max-w-[1180px] mx-auto pb-16 pt-2">{body}</main>
+          {titleBar && <TitleBar />}
+          <div className={'pl-[96px] pr-6 transition-[padding] duration-200 ease-out ' + (titleBar ? 'pt-[40px] ' : '') + (claudeOpen ? 'xl:pr-[372px]' : '')}>
+            {!titleBar && <TopBar />}
+            <main id="main" className={'max-w-[1180px] mx-auto pb-16 ' + (titleBar ? 'pt-7' : 'pt-2')}>{body}</main>
           </div>
           <ClaudePanel />
         </div>
