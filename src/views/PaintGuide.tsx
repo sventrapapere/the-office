@@ -55,27 +55,42 @@ function RefImage({ r, className, onClick }: { r: RefImg; className?: string; on
   return <img src={r.url} alt={r.caption} loading="lazy" referrerPolicy="no-referrer" onError={() => setBad(true)} onClick={onClick} className={clsx('object-cover bg-s2', onClick && 'cursor-zoom-in', className)} />
 }
 
-/** Riferimento ingrandito, con le frecce per scorrere. */
+/** Riferimento ingrandito: riempie lo schermo; un tocco = zoom al doppio con trascinamento, frecce per scorrere. */
 function Lightbox({ list, i, onClose, setI }: { list: RefImg[]; i: number | null; onClose: () => void; setI: (n: number) => void }) {
   const r = i == null ? null : list[i]
+  const [zoom, setZoom] = useState(false)
+  const [nat, setNat] = useState<{ w: number; h: number } | null>(null)
+  useEffect(() => { setZoom(false); setNat(null) }, [i])
   useEffect(() => {
     if (i == null) return
     const k = (e: KeyboardEvent) => { if (e.key === 'ArrowRight' && i < list.length - 1) setI(i + 1); if (e.key === 'ArrowLeft' && i > 0) setI(i - 1) }
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
   }, [i, list.length, setI])
+  const small = nat && Math.max(nat.w, nat.h) < 500
   return (
-    <Modal open={!!r} onOpenChange={(o) => !o && onClose()} title={r?.caption || 'Immagine'} hideTitle className="!max-w-[min(1100px,96vw)] !w-auto">
+    <Modal open={!!r} onOpenChange={(o) => !o && onClose()} title={r?.caption || 'Immagine'} hideTitle className="!max-w-[min(1400px,98vw)] !w-[98vw] !p-0 !top-[1vh] overflow-hidden">
       {r && (
         <div className="flex flex-col">
-          <div className="relative bg-black flex items-center justify-center">
-            <img src={r.url} alt={r.caption} referrerPolicy="no-referrer" className="max-h-[78vh] max-w-full object-contain" />
+          <div className={clsx('relative bg-black h-[min(80vh,1100px)]', zoom ? 'overflow-auto' : 'overflow-hidden flex items-center justify-center')}>
+            <img
+              src={r.url} alt={r.caption} referrerPolicy="no-referrer"
+              onLoad={(e) => setNat({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+              onClick={() => setZoom((z) => !z)}
+              className={clsx(zoom ? 'max-w-none w-[200%] cursor-zoom-out' : 'w-full h-full object-contain cursor-zoom-in')}
+              style={{ imageRendering: small ? 'auto' : undefined }}
+            />
             {i! > 0 && <IconButton icon="left" label="Precedente" className="!absolute left-2 top-1/2 -translate-y-1/2 bg-black/60" onClick={() => setI(i! - 1)} />}
             {i! < list.length - 1 && <IconButton icon="right" label="Successiva" className="!absolute right-2 top-1/2 -translate-y-1/2 bg-black/60" onClick={() => setI(i! + 1)} />}
+            {list.length > 1 && <span className="absolute top-2 left-1/2 -translate-x-1/2 text-[12px] num px-2 py-0.5 rounded bg-black/60 text-white">{i! + 1}/{list.length}</span>}
           </div>
           <div className="px-4 py-3 flex flex-col gap-1">
             <div className="text-[14px] font-medium">{r.caption}{r.view && <span className="text-mu"> · {r.view}</span>}{r.steps.length > 0 && <span className="text-mu"> · passaggio {r.steps.join(', ')}</span>}</div>
             {r.note && <div className="text-[13px] text-mu">{r.note}</div>}
-            {r.source && <button type="button" onClick={() => openExt(r.source!.url)} className="self-start text-[13px] text-ac cursor-pointer hover:underline">{r.source.label} ↗</button>}
+            {small && <div className="text-[12px] text-ac">Foto piccola già all'origine ({nat!.w}×{nat!.h} px): ingrandita più di così si sgrana.</div>}
+            <div className="flex flex-wrap items-center gap-3 text-[12px] text-mu">
+              <span>Tocca la foto per {zoom ? 'tornare intera' : 'ingrandirla'}</span>
+              {r.source && <button type="button" onClick={() => openExt(r.source!.url)} className="text-[13px] text-ac cursor-pointer hover:underline">{r.source.label} ↗</button>}
+            </div>
           </div>
         </div>
       )}
@@ -94,7 +109,7 @@ function Finished({ g, onZoom }: { g: Guide; onZoom: (list: RefImg[], i: number)
       <div className="flex items-baseline gap-2"><h3 className="m-0 text-[13px] font-semibold uppercase tracking-[0.06em] text-mu">Finita</h3>{f.length > 0 && <span className="text-[12px] text-mu">{f.length} {f.length === 1 ? 'foto' : 'foto'}</span>}</div>
       {cur ? (
         <>
-          <RefImage r={cur} onClick={() => onZoom(f, i)} className="w-full aspect-[4/3] rounded-lg" />
+          <RefImage r={cur} onClick={() => onZoom(f, i)} className="w-full aspect-[4/3] rounded-lg !object-contain !bg-black" />
           <div className="flex flex-wrap gap-1.5">
             {f.map((x, k) => <Chip key={x.url} on={k === i} onClick={() => setI(k)}>{x.view || 'foto ' + (k + 1)}</Chip>)}
             {missing.map((v) => <span key={v} className="h-8 px-3 rounded-full border border-dashed border-ol text-mu text-[13px] inline-flex items-center" title="Non trovata: chiedi a Claude di cercarla">{v}</span>)}
