@@ -74,6 +74,7 @@ function SideMenu({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boo
 export function PhoneShell({ children }: { children: ReactNode }) {
   const route = useStore((s) => s.route)
   const reader = useStore((s) => s.reader)
+  const sub = useStore((s) => s.sub)
   const settings = useStore((s) => s.settings)
   const go = useStore((s) => s.go)
   const set = useStore((s) => s.set)
@@ -111,7 +112,7 @@ export function PhoneShell({ children }: { children: ReactNode }) {
 
       <main id="main" className={clsx('flex-1 px-3 pt-1', route === 'home' && !reader && capOn ? 'pb-[150px]' : 'pb-[100px]')}>{children}</main>
 
-      {!reader && route !== 'home' && (
+      {!reader && route !== 'home' && !sub?.startsWith('guida:') && (
         <button
           type="button"
           onClick={() => set('captureOpen', true)}

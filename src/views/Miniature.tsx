@@ -8,6 +8,8 @@ import { Modal } from '../ui/Sheet'
 import { Icon } from '../ui/Icon'
 import { mdSection, mdTable, type Note } from '../lib/md'
 import { todayKey } from '../lib/checklist'
+import { parseGuides, findGuide, type Guide } from '../lib/guide'
+import PaintGuide, { GUIDE_SUB, guideSub, GuideThumb } from './PaintGuide'
 import { KIT, LAV, INV, GAMES, STAGES, lots, setLot, punto, schemes, addScheme, nextSteps, quadro, wishes, addWish, removeWish, questions, toggleQuestion, games as parseGames, addGame, type Lot, type Game } from '../lib/kit'
 
 /**
@@ -18,6 +20,7 @@ import { KIT, LAV, INV, GAMES, STAGES, lots, setLot, punto, schemes, addScheme, 
 const MIN_DIR = '55 Miniature'
 const KIT_DIR = KIT
 const KIT_PAIR = 'Kit MESBG'
+const RIC_FILE = KIT + '/ricettario-pittura.md'
 const STAGE_C = ['var(--s3)', 'color-mix(in srgb, var(--ac) 30%, var(--bg))', 'color-mix(in srgb, var(--ac) 52%, var(--bg))', 'color-mix(in srgb, var(--ac) 75%, var(--bg))', 'var(--ac)']
 const RM_CAP: Record<number, string> = {
   1: 'Introduzione e regole di base', 2: 'Sequenza del turno, priorità, movimento', 3: 'Movimento: cariche e terreno', 4: 'Fase di tiro',
@@ -42,15 +45,10 @@ function kitOpen(rel: string, desktop: boolean) {
   fetch('/_api/open-source?pair=' + encodeURIComponent(KIT_PAIR) + '&rel=' + encodeURIComponent(rel)).then((r) => { if (r.status === 404) toast('File non trovato nel kit: ' + rel) }).catch(() => toast('L’app non riesce ad aprire il file.'))
 }
 
-/** Passaggi di uno schema del ricettario: "Sequenza al banco" numerata se c'è, altrimenti le voci dell'elenco. */
+/** Titoli dei passaggi di uno schema del ricettario (formato standard delle guide). */
 export function recipeSteps(ricettario: string, head: string): string[] {
-  const sec = mdSection(ricettario, head)
-  if (!sec) return []
-  const seq = sec.match(/###\s+Sequenza[^\n]*\n([\s\S]*)/)
-  const src = seq ? seq[1] : sec
-  const num = [...src.matchAll(/^\d+\.\s+(.+)$/gm)].map((m) => m[1])
-  const items = num.length ? num : [...src.matchAll(/^[-*]\s+(.+)$/gm)].map((m) => m[1])
-  return items.map((s) => { const b = s.match(/^\*\*([^*]+?):?\*\*/); return strip(b ? b[1] : s.split(/[:—]/)[0]).replace(/:$/, '').slice(0, 70) })
+  const g = findGuide(parseGuides(ricettario), head)
+  return g ? g.steps.map((s) => s.title) : []
 }
 
 /** Legge un file del kit, lo trasforma e lo riscrive (con "Annulla"). */
@@ -92,7 +90,7 @@ function Focus({ lav, phone }: { lav: Note; phone?: boolean }) {
 }
 
 // ───────────── lotti in lavorazione ─────────────
-function LotCard({ lot, lav, ric, phone }: { lot: Lot; lav: Note; ric?: Note; phone?: boolean }) {
+function LotCard({ lot, lav, guides, phone }: { lot: Lot; lav: Note; guides: Guide[]; phone?: boolean }) {
   const st = useStore.getState()
   const total = lot.pezzi || lot.fasi.reduce((a, b) => a + b, 0)
   const save = (next: Partial<Lot>, label: string) => edit(LAV, (t) => setLot(t, lot.lotto, { ...lot, ...next, agg: todayKey() }), label)
@@ -102,15 +100,17 @@ function LotCard({ lot, lav, ric, phone }: { lot: Lot; lav: Note; ric?: Note; ph
     const f = [...lot.fasi]; f[i]--; f[j]++
     save({ fasi: f }, `1 pezzo: ${STAGES[i]} → ${STAGES[j]}`)
   }
-  const heads = ric ? [...ric.body.matchAll(/^## (.+)$/gm)].map((m) => m[1].trim()).filter((h) => !/tavolozza|tabella|scenografia|basette/i.test(h)) : []
+  const heads = guides.map((g) => g.head).filter((h) => !/scenografia|basette/i.test(h))
   const chosen = schemes(lav.body)
-  const steps = ric && lot.schema ? recipeSteps(ric.body, lot.schema) : []
+  const guide = lot.schema ? findGuide(guides, lot.schema) : undefined
+  const steps = guide ? guide.steps.map((s) => s.title) : []
+  const table = () => guide && st.goSub(guideSub(guide.head, lot.lotto))
   const step = lot.passo ?? 1
   const useScheme = (h: string) => edit(LAV, (t) => addScheme(setLot(t, lot.lotto, { ...lot, schema: h, passo: 1, agg: todayKey() }), { cosa: lot.lotto, schema: h, fonte: 'ricettario-pittura.md', manca: 'da verificare con Claude' }), 'Schema scelto: ' + h.split(/\s+—\s+/)[0])
   const name = lot.lotto.replace(/^[A-Z]{2,5}\s+—\s+/, '')
   return (
     <Card title={phone ? 'In lavorazione' : `In lavorazione · ${name}`} plain={phone}
-      right={ric && lot.schema && !phone ? <Button size="sm" onClick={() => st.open(ric.path, lot.schema)}>Apri lo schema</Button> : undefined}
+      right={guide && !phone ? <Button size="sm" variant="ghost" onClick={() => st.open(RIC_FILE, guide.head)}>Nel ricettario</Button> : undefined}
       menu={[
         ...chosen.map((c) => ({ label: 'Schema: ' + c.schema.split(/\s+—\s+/)[0], checked: c.schema === lot.schema, onClick: () => save({ schema: c.schema, passo: 1 }, 'Schema cambiato') })),
         ...(chosen.length ? [{ sep: true, label: '', onClick: () => {} }] : []),
@@ -146,23 +146,18 @@ function LotCard({ lot, lav, ric, phone }: { lot: Lot; lav: Note; ric?: Note; ph
           </div>
         </div>
       )}
-      {steps.length > 0 && (
-        <ol className="m-0 p-0 list-none flex flex-col gap-1 mt-1">
-          {steps.map((s, i) => {
-            const n = i + 1, past = n < step, cur = n === step
-            return (
-              <li key={i}>
-                <button type="button" onClick={() => save({ passo: cur ? n + 1 : n }, cur ? 'Passaggio fatto' : 'Passaggio corrente')} className="w-full flex items-center gap-3 min-h-[40px] text-left cursor-pointer rounded-md hov px-1">
-                  {past ? <span className="w-[22px] h-[22px] rounded-full bg-ac text-[#1A0A02] flex items-center justify-center flex-none"><Icon name="check" size={13} stroke={3} /></span>
-                    : <span className={clsx('w-[22px] h-[22px] rounded-full flex items-center justify-center flex-none num text-[11px]', cur ? 'border-[1.5px] border-ac text-ac font-semibold' : 'border border-ol text-mu')}>{n}</span>}
-                  <span className={clsx('flex-1', past && 'line-through text-mu', cur && 'font-semibold')}>{s}</span>
-                  {cur && <span className="text-[11px] font-semibold px-1.5 h-5 rounded bg-s3 inline-flex items-center">ora</span>}
-                </button>
-              </li>
-            )
-          })}
-        </ol>
+      {guide && (
+        <button type="button" onClick={table} className="flex items-center gap-3 p-2.5 pr-3.5 rounded-xl bg-s2 hov cursor-pointer text-left press">
+          <GuideThumb g={guide} className="w-16 h-16 rounded-lg flex-none" />
+          <span className="flex-1 min-w-0">
+            <span className="block text-[12px] text-mu">Passaggio <span className="num">{Math.min(step, steps.length)}</span> di <span className="num">{steps.length}</span></span>
+            <span className="block text-[16px] font-semibold truncate">{steps[Math.min(step, steps.length) - 1]}</span>
+            <span className="block text-[12px] text-mu truncate">{guide.refs.finished.length + guide.refs.steps.length ? `${guide.refs.finished.length + guide.refs.steps.length} immagini di riferimento` : 'nessuna immagine di riferimento ancora'}</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-lg bg-ac text-[#1A0A02] font-semibold text-[14px] flex-none"><Icon name="brush" size={15} />Al tavolo</span>
+        </button>
       )}
+      {lot.schema && !guide && <Empty>Non trovo «{lot.schema}» nel ricettario.</Empty>}
       {lot.schema && (
         <div className="flex flex-wrap gap-2">
           <AskBtn size="sm" text={`Sto dipingendo il lotto «${lot.lotto}» con lo schema «${lot.schema}», sono al passaggio ${step}${steps[step - 1] ? ` («${steps[step - 1]}»)` : ''}. Spiegami come farlo bene con i colori che ho.`}>Come faccio questo passaggio?</AskBtn>
@@ -293,12 +288,13 @@ export default function Miniature({ phone }: { phone?: boolean }) {
   const st = useStore.getState()
   const [tab, setTab] = useState<'pittura' | 'collezione' | 'partite' | 'regole'>('pittura')
   const [gameOpen, setGameOpen] = useState(false)
+  const sub = useStore((s) => s.sub)
   const get = (p: string) => notes.find((n) => n.path === p)
   const kit = (f: string) => get(KIT_DIR + '/' + f)
   const inv = get(INV), lav = get(LAV), ric = kit('ricettario-pittura.md'), games = get(GAMES)
   const desktop = vault?.kind === 'desktop'
   const lotList = useMemo(() => (lav ? lots(lav.body) : []), [lav])
-  const heads = ric ? [...ric.body.matchAll(/^## (.+)$/gm)].map((m) => m[1].trim()).filter((h) => !/^tabella/i.test(h)) : []
+  const guides = useMemo(() => parseGuides(ric?.body || ''), [ric?.body])
   const supplies = lav ? mdTable(mdSection(mdSection(lav.body, '5. Attrezzatura e colori'), 'Cosa ho', 3)).slice(1).map((r) => strip(r[0])).filter(Boolean) : []
   const caps = notes.filter((n) => n.path.startsWith(KIT_DIR + '/Manuale ITA/Traduzione/')).sort((a, b) => a.name.localeCompare(b.name))
   const vad = get(MIN_DIR + '/Vademecum prime partite.md')
@@ -306,18 +302,18 @@ export default function Miniature({ phone }: { phone?: boolean }) {
 
   const recipes = (
     <Card title="Ricettario di pittura" plain={phone} right={ric ? <button type="button" className="text-[12px] text-mu px-2 h-7 rounded-md hov cursor-pointer" onClick={() => st.open(ric.path)}>Tutto</button> : undefined} flush>
-      {heads.filter((h) => !/tavolozza/i.test(h)).map((h) => {
-        const k = recipeSteps(ric!.body, h).length
-        const used = lotList.some((l) => l.schema === h)
+      {guides.map((g) => {
+        const used = lotList.find((l) => l.schema && findGuide(guides, l.schema) === g)
+        const imgs = g.refs.finished.length + g.refs.steps.length
         return (
-          <button key={h} type="button" onClick={() => st.open(ric!.path, h)} className="flex items-center gap-3 min-h-[52px] px-1.5 border-b border-ln last:border-b-0 text-left cursor-pointer hov rounded-md">
-            <span className="flex-1 min-w-0 truncate">{h.split(/\s+—\s+/)[0]}</span>
+          <button key={g.head} type="button" onClick={() => st.goSub(guideSub(g.head, used?.lotto))} className="flex items-center gap-3 min-h-[60px] px-1.5 py-1.5 border-b border-ln last:border-b-0 text-left cursor-pointer hov rounded-md">
+            <GuideThumb g={g} className="w-11 h-11 rounded-md flex-none" />
+            <span className="flex-1 min-w-0"><span className="block truncate">{g.title}</span><span className="block text-[12px] text-mu truncate">{g.steps.length} passaggi · {imgs ? imgs + ' immagini' : 'senza immagini'}</span></span>
             {used && <Badge tone="accent">in uso</Badge>}
-            {k > 0 && <span className="text-[12px] text-mu whitespace-nowrap">{k} passaggi</span>}
           </button>
         )
       })}
-      {!heads.length && <Empty>Ricettario non trovato.</Empty>}
+      {!guides.length && <Empty>Ricettario non trovato.</Empty>}
     </Card>
   )
   const colors = (
@@ -341,6 +337,8 @@ export default function Miniature({ phone }: { phone?: boolean }) {
     </Card>
   )
 
+  if (sub?.startsWith(GUIDE_SUB)) return <PaintGuide sub={sub} phone={phone} />
+
   if (!inv || !lav)
     return (
       <div className="flex flex-col gap-4">
@@ -349,7 +347,7 @@ export default function Miniature({ phone }: { phone?: boolean }) {
       </div>
     )
 
-  const lotCards = lotList.length ? lotList.map((l) => <LotCard key={l.lotto} lot={l} lav={lav} ric={ric} phone={phone} />)
+  const lotCards = lotList.length ? lotList.map((l) => <LotCard key={l.lotto} lot={l} lav={lav} guides={guides} phone={phone} />)
     : <Card title="In lavorazione" plain={phone}><Empty icon="brush" action={<AskBtn text="Aggiungi alla tabella Avanzamento dei lotti di lavorazione.md i lotti che sto lavorando, in base all'inventario.">Chiedi all’agente di preparare i lotti</AskBtn>}>Nessun lotto nella tabella «Avanzamento dei lotti» di lavorazione.md.</Empty></Card>
 
   if (phone)
